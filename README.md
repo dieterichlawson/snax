@@ -9,6 +9,7 @@ You came to the right place.
 
 ```
 import snax
+
 hidden_sizes = [10, 20, 30]
 input_size = 3
 
@@ -20,6 +21,8 @@ out = mlp.apply(params, jnp.zeros([input_size]))
 ### Creating a deep LSTM example
 
 ```
+import snax
+
 input_dim = 3
 num_steps = 40
 hidden_layer_sizes = [32, 64, 32]
