@@ -5,7 +5,7 @@ You're hungry for a dead-simple functional deep learning library?
 You came to the right place.
 
 
-### Creating a Multi-layer perceptron example
+### Creating a Multi-layer perceptron
 
 ```
 import snax
@@ -18,7 +18,7 @@ out_dim, params = mlp.init(jax.random.PRNGKey(0), input_size)
 out = mlp.apply(params, jnp.zeros([input_size]))
 ```
 
-### Creating a deep LSTM example
+### Creating a deep LSTM
 
 ```
 import snax
@@ -34,5 +34,5 @@ _, params = lstm.init(key, input_dim)
 
 # Run the LSTM on some inputs
 inputs = jnp.zeros((num_steps, input_dim))
-state, outs = dynamic_unroll(params, lstm.apply, inputs, lstm.initial_state())
+state, outs = snax.dynamic_unroll(params, lstm.apply, inputs, lstm.initial_state())
 ```
