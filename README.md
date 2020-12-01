@@ -1,6 +1,6 @@
 # SNAX
 
-You're hungry for a dead-simple functional deep learning library?
+Hungry for a dead-simple functional deep learning library?
 
 You came to the right place.
 
@@ -23,16 +23,16 @@ out = mlp.apply(params, jnp.zeros([input_size]))
 ```
 import snax
 
-input_dim = 3
+input_size = 3
 num_steps = 40
 hidden_layer_sizes = [32, 64, 32]
 
 lstm = snax.DeepRNN(snax.LSTM, hidden_layer_sizes)
 
 key = jax.random.PRNGKey(0)
-_, params = lstm.init(key, input_dim)
+_, params = lstm.init(key, input_size)
 
 # Run the LSTM on some inputs
-inputs = jnp.zeros((num_steps, input_dim))
+inputs = jnp.zeros((num_steps, input_size))
 state, outs = snax.dynamic_unroll(params, lstm.apply, inputs, lstm.initial_state())
 ```
