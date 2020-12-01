@@ -107,6 +107,18 @@ def MLP(layer_dims,
 
   return Module(init, apply)
 
+def Residual(layer):
+
+  def init(key, input_dim):
+    out_dim, params = layer.init(key, input_dim)
+    assert input_dim == out_dim, "Residual layers must have the same input and output dims."
+    return out_dim, params
+
+  def apply(params, inputs):
+    return inputs + layer.apply(params, inputs)
+
+  return Module(init, apply)
+
 class RNNState(NamedTuple):
 
   hidden: jnp.ndarray
