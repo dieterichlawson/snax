@@ -9,6 +9,10 @@ from .nn import Affine, AffineParams
 
 from jax.nn.initializers import glorot_normal, normal
 
+import tensorflow_probability
+from tensorflow_probability.substrates import jax as tfp
+tfd = tfp.distributions
+
 def unflatten_scale(flat_scale, original_dim, min_diag=1e-4):
   out = jnp.zeros([original_dim, original_dim], dtype=flat_scale.dtype)
   out = out.at[jnp.tril_indices(original_dim)].set(flat_scale)
