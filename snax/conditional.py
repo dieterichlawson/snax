@@ -100,8 +100,6 @@ def FullCovarianceGaussian(
   and unrestricted off-diagonal elements. The diagonal elements are ensured
   to be positive by exponentiating them.
   """
-  if covariance is None:
-    covariance = jnp.eye(event_dim)
 
   def dist_fn(raw_params):
     loc = raw_params[:event_dim]
