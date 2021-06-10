@@ -54,7 +54,7 @@ def ConditionalDistribution(
     k1, k2 = jax.random.split(key)
     input = vectorize_pytree(example_args)
     cond_fn_out_dim, cond_fn_params = conditioning_fn.init(k1, input.shape[0])
-    _, proj_params = proj.init(k2, cond_fn_out_dim[0])
+    _, proj_params = proj.init(k2, cond_fn_out_dim)
     return [event_dim], ConditionalDistributionParams(cond_fn_params, proj_params)
 
   def apply(params, *args):

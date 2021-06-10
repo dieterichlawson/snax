@@ -29,7 +29,7 @@ def Linear(out_dim, W_init=glorot_normal()):
 
   def init(key, input_dim):
     W = W_init(key, (input_dim, out_dim))
-    return [out_dim], LinearParams(W)
+    return out_dim, LinearParams(W)
 
   def apply(params, inputs):
     return jnp.dot(inputs, params.W)
