@@ -19,7 +19,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-          'jax', 'jaxlib', 'tensorflow_probability', 'chex'
+          'jax', 'jaxlib', 'tensorflow_probability', 'chex', 'typing_extensions'
       ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
 )
