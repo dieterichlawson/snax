@@ -1,83 +1,108 @@
 import jax
 import jax.numpy as jnp
-from collections import namedtuple
+from jax._src.random import KeyArray as PRNGKey
+from chex import Array
+from typing import Tuple, Sequence, List
+from dataclasses import dataclass
+from .utils import register_pytree
+from .base import Layer, ParamBase
 
-import typing
-from typing import NamedTuple, List
+from jax.nn.initializers import glorot_normal, zeros
 
-from .base import Module
-
-from jax.nn.initializers import glorot_normal, normal, ones, zeros
-
-def Identity():
+def Identity() -> Layer[None]:
   """A layer which passes the input through unchanged."""
 
-  def init(unused_key, input_shape):
-    return input_shape, None
+  class Identity:
 
-  def apply(params, inputs):
-    return inputs
+    @staticmethod
+    def init(key: PRNGKey, input_dim: int) -> Tuple[int, None]:
+      del key
+      return input_dim, None
 
-  return Module(init, apply)
+    @staticmethod
+    def apply(params: None, inputs: Array) -> Array:
+      del params
+      return inputs
 
-class LinearParams(NamedTuple):
+  return Identity
 
-  W: jnp.ndarray
+@register_pytree
+@dataclass
+class LinearParams(ParamBase):
+  W: Array
 
-def Linear(out_dim, W_init=glorot_normal()):
+def Linear(out_dim: int,
+           W_init=glorot_normal()) -> Layer[LinearParams]:
   """A Linear layer (no bias)."""
 
-  def init(key, input_dim):
-    W = W_init(key, (input_dim, out_dim))
-    return out_dim, LinearParams(W)
+  class Linear:
 
-  def apply(params, inputs):
-    return jnp.dot(inputs, params.W)
+    @staticmethod
+    def init(key: PRNGKey, input_dim: int) -> Tuple[int, LinearParams]:
+      W = W_init(key, (input_dim, out_dim))
+      return out_dim, LinearParams(W=W)
 
-  return Module(init, apply)
+    @staticmethod
+    def apply(params: LinearParams, inputs: Array) -> Array:
+      return jnp.dot(inputs, params.W)
 
-class AffineParams(NamedTuple):
+  return Linear
 
-  W: jnp.ndarray
-  b: jnp.ndarray
+@register_pytree
+@dataclass
+class AffineParams(ParamBase):
+  W: Array
+  b: Array
 
-def Affine(out_dim, W_init=glorot_normal(), b_init=normal()):
+def Affine(out_dim: int,
+           W_init=glorot_normal(),
+           b_init=zeros) -> Layer[AffineParams]:
   """An affine layer."""
 
-  def init(key, input_dim):
-    k1, k2 = jax.random.split(key)
-    W, b = W_init(k1, (input_dim, out_dim)), b_init(k2, (out_dim,))
-    return out_dim, AffineParams(W, b)
+  class Affine:
 
-  def apply(params, inputs):
-    return jnp.dot(inputs, params.W) + params.b
+    @staticmethod
+    def init(key: PRNGKey, input_dim: int) -> Tuple[int, AffineParams]:
+      k1, k2 = jax.random.split(key)
+      W = W_init(k1, (input_dim, out_dim))
+      b = b_init(k2, (out_dim,))
+      return out_dim, AffineParams(W=W, b=b)
 
-  return Module(init, apply)
+    @staticmethod
+    def apply(params: AffineParams, inputs: Array) -> Array:
+      return jnp.dot(inputs, params.W) + params.b
+
+  return Affine
 
 def Dense(out_dim,
           W_init=glorot_normal(),
-          b_init=normal(),
-          activation=jax.nn.relu):
+          b_init=zeros,
+          activation=jax.nn.relu) -> Layer[AffineParams]:
   """A single-layer MLP (Affine layer with an activation)."""
   affine = Affine(out_dim, W_init=W_init, b_init=b_init)
 
-  def init(key, input_dim):
-    return affine.init(key, input_dim)
+  class Dense:
 
-  def apply(params, inputs):
-    return activation(affine.apply(params, inputs))
+    @staticmethod
+    def init(key: PRNGKey, input_dim: int) -> Tuple[int, AffineParams]:
+      return affine.init(key, input_dim)
 
-  return Module(init, apply)
+    @staticmethod
+    def apply(params: AffineParams, inputs: Array) -> Array:
+      return activation(affine.apply(params, inputs))
 
-class MLPParams(NamedTuple):
+  return Dense
 
-  layer_params: List[AffineParams]
+@register_pytree
+@dataclass
+class MLPParams(ParamBase):
+  layer_params: Sequence[AffineParams]
 
-def MLP(layer_dims,
+def MLP(layer_dims: List[int],
         W_init=glorot_normal(),
-        b_init=normal(),
+        b_init=zeros,
         activation=jax.nn.relu,
-        activate_final=False):
+        activate_final=False) -> Layer[MLPParams]:
   """A multi-layered perceptron."""
 
   layers = []
@@ -90,29 +115,21 @@ def MLP(layer_dims,
   else:
     layers.append(Affine(layer_dims[-1], W_init=W_init, b_init=b_init))
 
-  def init(key, input_dim):
-    keys = jax.random.split(key, num=len(layer_dims))
-    input_dims = [input_dim] + layer_dims[:-1]
-    params = []
-    for layer, key, in_dim in zip(layers, keys, input_dims):
-      params.append(layer.init(key, in_dim)[1])
-    return layer_dims[-1], MLPParams(params)
+  class MLP:
 
-  def apply(params, inputs):
-    for layer, param in zip(layers, params.layer_params):
-      inputs = layer.apply(param, inputs)
-    return inputs
+    @staticmethod
+    def init(key: PRNGKey, input_dim: int) -> Tuple[int, MLPParams]:
+      keys = jax.random.split(key, num=len(layer_dims))
+      input_dims = [input_dim] + layer_dims[:-1]
+      params = []
+      for layer, key, in_dim in zip(layers, keys, input_dims):
+        params.append(layer.init(key, in_dim)[1])
+      return layer_dims[-1], MLPParams(params)
 
-  return Module(init, apply)
+    @staticmethod
+    def apply(params: MLPParams, inputs: Array) -> Array:
+      for layer, param in zip(layers, params.layer_params):
+        inputs = layer.apply(param, inputs)
+      return inputs
 
-def Residual(layer):
-
-  def init(key, input_dim):
-    out_dim, params = layer.init(key, input_dim)
-    assert input_dim == out_dim, "Residual layers must have the same input and output dims."
-    return out_dim, params
-
-  def apply(params, inputs):
-    return inputs + layer.apply(params, inputs)
-
-  return Module(init, apply)
+  return MLP

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="snax",
-    version="0.0.1",
+    version="0.0.2",
     author="Dieterich Lawson",
     author_email="dieterich.lawson@gmail.com",
     description="A simple functional deep learning library.",
@@ -19,7 +19,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-          'jax', 'jaxlib', 'tfp-nightly'
+          'jax', 'jaxlib', 'tfp-nightly', 'chex'
       ],
     python_requires='>=3.6',
 )
