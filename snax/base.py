@@ -1,10 +1,5 @@
 from jax._src.random import KeyArray as PRNGKey
-from typing import Tuple, TypeVar, Optional, Sequence
-
-try:
-  from typing import Protocol
-except ImportError:
-  from typing_extensions import Protocol
+from typing import Tuple, TypeVar, Optional, Sequence, Protocol
 
 from chex import Array, ArrayTree
 
