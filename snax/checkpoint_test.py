@@ -4,6 +4,16 @@ import jax
 import jax.numpy as jnp
 import checkpoint
 
+def test_checkpoint_dir_not_exists():
+  data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
+  step = 1
+  with tempfile.TemporaryDirectory() as dirname:
+    new_dir = os.path.join(dirname, "tmp")
+    checkpoint.save_checkpoint(data, 1, new_dir)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(new_dir)
+    assert jnp.allclose(data, reloaded_data)
+    assert step == reloaded_step
+
 def test_checkpoint():
   data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
   step = 1
@@ -47,3 +57,4 @@ def test_removing_checkpoint():
 test_checkpoint()
 test_checkpoint_multi()
 test_removing_checkpoint()
+test_checkpoint_dir_not_exists()

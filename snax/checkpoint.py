@@ -1,6 +1,5 @@
-import os
-import glob
 import pickle
+from pathlib import Path
 
 def save_checkpoint(data, step, checkpoint_dir,
         num_checkpoints_to_keep=3, name_prefix="checkpoint",
@@ -15,18 +14,18 @@ def save_checkpoint(data, step, checkpoint_dir,
   assert all([step > s for s in checkpoint_steps]), "Attempting to write earlier checkpoint."
   if len(checkpoint_steps) == num_checkpoints_to_keep:
     to_remove = checkpoint_steps.index(min(checkpoint_steps))
-    os.remove(existing_checkpoints[to_remove])
-  new_path = os.path.join(checkpoint_dir,
-          name_prefix + "_" + step_format.format(step=step) + filetype)
+    existing_checkpoints[to_remove].unlink()
+  new_name = name_prefix + "_" + step_format.format(step=step) + filetype
+  new_path = Path(checkpoint_dir) / new_name
   save_checkpoint_to_path(data, step, new_path)
 
 def get_checkpoints(checkpoint_dir, name_prefix="checkpoint", filetype=".chk"):
-  checkpoint_glob = os.path.join(checkpoint_dir, name_prefix + '*' + filetype)
-  checkpoint_fnames = glob.glob(checkpoint_glob)
-  return checkpoint_fnames
+  checkpoint_glob = name_prefix + '*' + filetype
+  checkpoint_paths = Path(checkpoint_dir).glob(checkpoint_glob)
+  return list(checkpoint_paths)
 
 def step_from_path(path):
-  return int(os.path.basename(path).split("_")[1].split(".")[0])
+  return int(path.stem.split("_")[1])
 
 def get_latest_checkpoint_path(checkpoint_dir, name_prefix="checkpoint", filetype=".chk"):
   paths = get_checkpoints(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
@@ -43,10 +42,11 @@ def load_latest_checkpoint(checkpoint_dir, name_prefix="checkpoint", filetype=".
   return load_checkpoint_from_path(path)
 
 def load_checkpoint_from_path(path):
-  with open(path, 'rb') as f:
+  with path.open(mode='rb') as f:
     data, step = pickle.load(f)
   return data, step
 
 def save_checkpoint_to_path(data, step, path):
-  with open(path, 'wb') as f:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with path.open(mode='wb') as f:
     pickle.dump((data, step), f)
