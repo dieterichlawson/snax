@@ -1,67 +1,15 @@
-from jax._src.random import KeyArray as PRNGKey
-from typing import Tuple, TypeVar, Optional, Sequence, Protocol
+from typing import Tuple, TypeVar, Protocol
 
-from chex import Array, ArrayTree
+from chex import Array
 
-class ParamBase:
+StateType = TypeVar('StateType')
 
-  def __iter__(self):
-    return self.__dict__.__iter__()
+class RecurrentCell(Protocol[StateType]):
 
-ParamType = TypeVar('ParamType', bound=ArrayTree)
-
-class Layer(Protocol[ParamType]):
-
-  @staticmethod
-  def init(key: PRNGKey, input_dim: int) -> Tuple[int, ParamType]:
-    """Initialize the layer."""
-    ...
-
-  @staticmethod
-  def apply(params: ParamType, inputs: Array) -> Array:
+  def __call__(self, prev_state: StateType, inputs: Array) -> Tuple[StateType, Array]:
     """Apply the layer."""
     ...
 
-StateType = TypeVar('StateType', bound=ArrayTree)
-
-class RecurrentCell(Protocol[ParamType, StateType]):
-
-  @staticmethod
-  def init(key: PRNGKey, input_dim: int) -> Tuple[int, ParamType]:
-    """Initialize the layer."""
-    ...
-
-  @staticmethod
-  def apply(params: ParamType, inputs: Array, prev_state: StateType) -> Tuple[StateType, Array]:
-    """Apply the layer."""
-    ...
-
-  @staticmethod
-  def initial_state() -> StateType:
+  def initial_state(self) -> StateType:
     """Initialize the state."""
     ...
-
-class RecurrentModel(Protocol[ParamType, StateType]):
-
-  @staticmethod
-  def init(key: PRNGKey, input_dim: int) -> Tuple[int, ParamType]:
-    """Initialize the layer."""
-    ...
-
-  @staticmethod
-  def apply(params: ParamType,
-            inputs: Array,
-            length: int,
-            initial_state: Optional[StateType]) -> Tuple[StateType, Array]:
-    """Apply the layer."""
-    ...
-
-  @staticmethod
-  def initial_state() -> StateType:
-    """Initialize the state."""
-    ...
-
-class DeepRecurrentModel(
-        RecurrentModel[Sequence[ParamType], Sequence[StateType]],
-        Protocol[ParamType, StateType]):
-  pass

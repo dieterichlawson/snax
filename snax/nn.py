@@ -1,135 +1,172 @@
 import jax
 import jax.numpy as jnp
+import equinox as eqx
+
 from jax._src.random import KeyArray as PRNGKey
 from chex import Array
-from typing import Tuple, Sequence, List
-from dataclasses import dataclass
-from .utils import register_pytree
-from .base import Layer, ParamBase
+from typing import List, Callable
 
 from jax.nn.initializers import glorot_normal, zeros
 
-def Identity() -> Layer[None]:
-  """A layer which passes the input through unchanged."""
+ActivationFn = Callable[[Array], Array]
 
-  class Identity:
+class Linear(eqx.Module):
+  """A linear layer parameterized by a single weight matrix, W."""
 
-    @staticmethod
-    def init(key: PRNGKey, input_dim: int) -> Tuple[int, None]:
-      del key
-      return input_dim, None
-
-    @staticmethod
-    def apply(params: None, inputs: Array) -> Array:
-      del params
-      return inputs
-
-  return Identity
-
-@register_pytree
-@dataclass
-class LinearParams(ParamBase):
   W: Array
 
-def Linear(out_dim: int,
-           W_init=glorot_normal()) -> Layer[LinearParams]:
-  """A Linear layer (no bias)."""
+  def __init__(self,
+               key: PRNGKey,
+               in_dim: int,
+               out_dim: int,
+               W_init=glorot_normal()):
+    """Create a linear layer.
 
-  class Linear:
+    Args:
+      key: A JAX PRNGKey used to initialize the weight matrix.
+      in_dim: The input dimension of the layer.
+      out_dim: The output dimension of the layer.
+      W_init: The initializer for the weight matrix.
+    """
+    self.W = W_init(key, (in_dim, out_dim))
 
-    @staticmethod
-    def init(key: PRNGKey, input_dim: int) -> Tuple[int, LinearParams]:
-      W = W_init(key, (input_dim, out_dim))
-      return out_dim, LinearParams(W=W)
+  def __call__(self, inputs: Array) -> Array:
+    """Apply the linear layer.
 
-    @staticmethod
-    def apply(params: LinearParams, inputs: Array) -> Array:
-      return jnp.dot(inputs, params.W)
+    Args:
+      inputs: the inputs to the layer, must be of shape [..., in_dim].
+    Returns:
+      output: inputs @ W.
+    """
+    return jnp.dot(inputs, self.W)
 
-  return Linear
+class Affine(eqx.Module):
+  """An affine layer parameterized by a weight W and bias b."""
 
-@register_pytree
-@dataclass
-class AffineParams(ParamBase):
   W: Array
   b: Array
 
-def Affine(out_dim: int,
-           W_init=glorot_normal(),
-           b_init=zeros) -> Layer[AffineParams]:
-  """An affine layer."""
+  def __init__(self,
+               key: PRNGKey,
+               in_dim: int,
+               out_dim: int,
+               W_init=glorot_normal(),
+               b_init=zeros):
+    """Create an affine layer.
 
-  class Affine:
+    Args:
+      key: A JAX PRNGKey used to initialize parameters
+      in_dim: The input dimension of the layer.
+      out_dim: The output dimension of the layer.
+      W_init: The initializer for the weight matrix.
+      b_init: The initializer for the bias.
+    """
+    self.W = W_init(key, (in_dim, out_dim))
+    self.b = b_init(key, (out_dim,))
 
-    @staticmethod
-    def init(key: PRNGKey, input_dim: int) -> Tuple[int, AffineParams]:
-      k1, k2 = jax.random.split(key)
-      W = W_init(k1, (input_dim, out_dim))
-      b = b_init(k2, (out_dim,))
-      return out_dim, AffineParams(W=W, b=b)
+  def __call__(self, inputs: Array) -> Array:
+    """Apply the affine layer.
 
-    @staticmethod
-    def apply(params: AffineParams, inputs: Array) -> Array:
-      return jnp.dot(inputs, params.W) + params.b
+    Args:
+      inputs: the inputs to the layer, must be of shape [..., in_dim].
+    Returns:
+      output: inputs @ W + b.
+    """
 
-  return Affine
+    return jnp.dot(inputs, self.W) + self.b
 
-def Dense(out_dim,
-          W_init=glorot_normal(),
-          b_init=zeros,
-          activation=jax.nn.relu) -> Layer[AffineParams]:
-  """A single-layer MLP (Affine layer with an activation)."""
-  affine = Affine(out_dim, W_init=W_init, b_init=b_init)
+class Dense(eqx.Module):
+  """A dense layer, with a weight W, bias b, and activation function."""
 
-  class Dense:
+  aff: Affine
+  act_fn: ActivationFn = eqx.static_field()
 
-    @staticmethod
-    def init(key: PRNGKey, input_dim: int) -> Tuple[int, AffineParams]:
-      return affine.init(key, input_dim)
+  def __init__(self,
+               key: PRNGKey,
+               in_dim: int,
+               out_dim: int,
+               act_fn: ActivationFn=jax.nn.relu,
+               W_init=glorot_normal(),
+               b_init=zeros):
+    """Create a dense layer.
 
-    @staticmethod
-    def apply(params: AffineParams, inputs: Array) -> Array:
-      return activation(affine.apply(params, inputs))
+    Args:
+      key: A JAX PRNGKey used to initialize parameters
+      in_dim: The input dimension of the layer.
+      out_dim: The output dimension of the layer.
+      act_fn: The activation function.
+      W_init: The initializer for the weight matrix.
+      b_init: The initializer for the bias.
+    """
 
-  return Dense
+    self.aff = Affine(key, in_dim, out_dim, W_init=W_init, b_init=b_init)
+    self.act_fn = act_fn
 
-@register_pytree
-@dataclass
-class MLPParams(ParamBase):
-  layer_params: Sequence[AffineParams]
+  def __call__(self, inputs: Array) -> Array:
+    """Apply the dense layer.
 
-def MLP(layer_dims: List[int],
-        W_init=glorot_normal(),
-        b_init=zeros,
-        activation=jax.nn.relu,
-        activate_final=False) -> Layer[MLPParams]:
-  """A multi-layered perceptron."""
+    Args:
+      inputs: the inputs to the layer, must be of shape [..., in_dim].
+    Returns:
+      output: activation_fn(inputs @ W + b).
+    """
 
-  layers = []
-  for dim in layer_dims[:-1]:
-    layers.append(Dense(dim, W_init=W_init, b_init=b_init,
-                        activation=activation))
-  if activate_final:
-    layers.append(Dense(layer_dims[-1], W_init=W_init, b_init=b_init,
-                        activation=activation))
-  else:
-    layers.append(Affine(layer_dims[-1], W_init=W_init, b_init=b_init))
+    return self.act_fn(self.aff(inputs))
 
-  class MLP:
+class MLP(eqx.Module):
+  """A multi-layer perceptron made of a stack of dense layers."""
 
-    @staticmethod
-    def init(key: PRNGKey, input_dim: int) -> Tuple[int, MLPParams]:
-      keys = jax.random.split(key, num=len(layer_dims))
-      input_dims = [input_dim] + layer_dims[:-1]
-      params = []
-      for layer, key, in_dim in zip(layers, keys, input_dims):
-        params.append(layer.init(key, in_dim)[1])
-      return layer_dims[-1], MLPParams(params)
+  layers: List[Dense]
 
-    @staticmethod
-    def apply(params: MLPParams, inputs: Array) -> Array:
-      for layer, param in zip(layers, params.layer_params):
-        inputs = layer.apply(param, inputs)
-      return inputs
+  def __init__(self,
+               key: PRNGKey,
+               in_dim: int,
+               layer_dims: List[int],
+               act_fn: ActivationFn,
+               final_act_fn: ActivationFn= lambda x: x,
+               W_init=glorot_normal(),
+               b_init=zeros):
+    """Create an MLP.
 
-  return MLP
+    Args:
+      key: A JAX PRNGKey used to initialize parameters
+      in_dim: The input dimension of the layer.
+      layer_dims: The output dimensions of each layer, a list of ints.
+      act_fn: The activation function for the hidden layers.
+      final_act_fn: The activation function for the final layer.
+      W_init: The initializer for the weight matrix.
+      b_init: The initializer for the bias.
+    """
+
+    self.layers = []
+    dims = [in_dim] + layer_dims
+    dim_pairs = list(zip(dims, dims[1:]))
+    for in_d, out_d in dim_pairs[:-1]:
+      key, subkey = jax.random.split(key)
+      self.layers.append(
+          Dense(subkey,
+                in_d,
+                out_d,
+                act_fn=act_fn,
+                W_init=W_init,
+                b_init=b_init))
+    final_in_d, final_out_d = dim_pairs[-1]
+    self.layers.append(
+        Dense(key,
+              final_in_d,
+              final_out_d,
+              act_fn=final_act_fn,
+              W_init=W_init,
+              b_init=b_init))
+
+  def __call__(self, inputs: Array) -> Array:
+    """Apply the MLP.
+
+    Args:
+      inputs: The inputs to the layer, must be of shape [..., in_dim].
+    Returns:
+      output: The MLP applied to the inputs.
+    """
+    for l in self.layers:
+      inputs = l(inputs)
+    return inputs

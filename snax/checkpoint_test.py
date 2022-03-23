@@ -2,7 +2,7 @@ import os
 import tempfile
 import jax
 import jax.numpy as jnp
-import checkpoint
+from . import checkpoint
 
 def test_checkpoint_dir_not_exists():
   data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
@@ -53,8 +53,3 @@ def test_removing_checkpoint():
     assert 3 in steps
     assert 4 in steps
     assert 5 in steps
-
-test_checkpoint()
-test_checkpoint_multi()
-test_removing_checkpoint()
-test_checkpoint_dir_not_exists()
