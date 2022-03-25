@@ -6,6 +6,8 @@ StateType = TypeVar('StateType')
 
 class RecurrentCell(Protocol[StateType]):
 
+  out_dim: int
+
   def __call__(self, prev_state: StateType, inputs: Array) -> Tuple[StateType, Array]:
     """Apply the layer."""
     ...

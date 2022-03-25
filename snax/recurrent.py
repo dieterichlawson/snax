@@ -27,6 +27,7 @@ class VanillaRNNCell(eqx.Module):
   recurrent_layer: Affine
   act_fn: ActivationFn = eqx.static_field()
   hidden_dim: int = eqx.static_field()
+  out_dim: int = eqx.static_field()
 
   def __init__(self,
                key: PRNGKey,
@@ -48,6 +49,7 @@ class VanillaRNNCell(eqx.Module):
                                   b_init=b_init)
     self.act_fn = act_fn
     self.hidden_dim = hidden_dim
+    self.out_dim = hidden_dim
 
   def __call__(self,
                prev_state: VanillaRNNState,
@@ -76,6 +78,7 @@ class LSTMCell(eqx.Module):
   recurrent_affine: Affine
 
   hidden_dim: int = eqx.static_field()
+  out_dim: int = eqx.static_field()
   act_fn: Callable = eqx.static_field()
   recurrent_act_fn: Callable = eqx.static_field()
   forget_gate_bias_init: int = eqx.static_field()
@@ -101,6 +104,7 @@ class LSTMCell(eqx.Module):
                                    W_init=recurrent_W_init,
                                    b_init=b_init)
     self.hidden_dim = hidden_dim
+    self.out_dim = hidden_dim
     self.act_fn = act_fn
     self.recurrent_act_fn = recurrent_act_fn
     self.forget_gate_bias_init = forget_gate_bias_init
@@ -143,6 +147,7 @@ class GRUCell(eqx.Module):
   hidden_to_a: Affine
 
   hidden_dim: int = eqx.static_field()
+  out_dim: int = eqx.static_field()
   act_fn: Callable = eqx.static_field()
   recurrent_act_fn: Callable = eqx.static_field()
 
@@ -170,6 +175,7 @@ class GRUCell(eqx.Module):
         keys[5], hidden_dim, hidden_dim, W_init=recurrent_W_init, b_init=b_init)
 
     self.hidden_dim = hidden_dim
+    self.out_dim = hidden_dim
     self.act_fn = act_fn
     self.recurrent_act_fn = recurrent_act_fn
 
@@ -254,6 +260,8 @@ class BiRNNCell(eqx.Module, Generic[StateType]):
   fwd_cell: RecurrentCell[StateType]
   bwd_cell: RecurrentCell[StateType]
 
+  out_dim: int = eqx.static_field()
+
   def __init__(self,
                key: PRNGKey,
                input_dim: int,
@@ -262,6 +270,7 @@ class BiRNNCell(eqx.Module, Generic[StateType]):
     k1, k2 = jax.random.split(key)
     self.fwd_cell = cell_constructor(k1, input_dim, hidden_dim)
     self.bwd_cell = cell_constructor(k2, input_dim, hidden_dim)
+    self.out_dim = self.fwd_cell.out_dim + self.bwd_cell.out_dim
 
   def initial_state(self) -> BiRNNCellState[StateType]:
     return (self.fwd_cell.initial_state(), self.bwd_cell.initial_state())
