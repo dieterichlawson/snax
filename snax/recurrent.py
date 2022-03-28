@@ -236,18 +236,30 @@ class RNN(eqx.Module, Generic[StateType]):
   def __call__(
           self,
           inputs: Array,
-          initial_state : Optional[List[StateType]]) -> Tuple[List[StateType], Array]:
-
-    def scan_body(
-            prev_state: List[StateType],
-            input: Array) -> Tuple[List[StateType], Tuple[List[StateType], Array]]:
-      new_state, out = self.one_step(prev_state, input)
-      return new_state, (new_state, out)
+          initial_state : Optional[List[StateType]],
+          initial_state_t: int = 0) -> Tuple[List[StateType], Array]:
 
     if initial_state is None:
       initial_state = self.initial_state()
 
-    _, (states, outputs) = jax.lax.scan(scan_body, initial_state, inputs)
+    def scan_body(
+            carry: Tuple[List[StateType], int],
+            input: Array
+            ) -> Tuple[Tuple[List[StateType], int], Tuple[List[StateType], Array]]:
+      prev_state, t = carry
+
+      if initial_state_t != 0:
+        prev_state = jax.lax.cond(
+                jnp.equal(initial_state_t, t),
+                lambda _: initial_state,
+                lambda _: prev_state,
+                None)
+
+      new_state, out = self.one_step(prev_state, input)
+      return (new_state, t+1), (new_state, out)
+
+
+    _, (states, outputs) = jax.lax.scan(scan_body, (initial_state, 0), inputs)
 
     return states, outputs
 
