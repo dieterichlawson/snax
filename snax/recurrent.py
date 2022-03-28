@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from jax._src.random import KeyArray as PRNGKey
 from typing import TypeVar, Tuple, Callable, Generic, List, Optional
-from chex import Array
+from chex import Array, Scalar
 
 from .utils import flip_first_n, register_dataclass
 from .nn import Linear, Affine
@@ -206,6 +206,9 @@ class RNN(eqx.Module, Generic[StateType]):
 
   cells: List[RecurrentCell[StateType]]
 
+  in_dim: int = eqx.static_field()
+  out_dim: int = eqx.static_field()
+
   def __init__(self,
                key: PRNGKey,
                input_dim: int,
@@ -213,9 +216,11 @@ class RNN(eqx.Module, Generic[StateType]):
                cell_constructor: RNNCellConstructor[StateType]):
     dims = zip([input_dim] + list(hidden_dims), hidden_dims)
     cells = []
+    self.in_dim = input_dim
     for in_dim, out_dim in dims:
       key, subkey = jax.random.split(key)
       cells.append(cell_constructor(subkey, in_dim, out_dim))
+    self.out_dim = out_dim
     self.cells = cells
 
   def initial_state(self) -> List[StateType]:
@@ -236,8 +241,8 @@ class RNN(eqx.Module, Generic[StateType]):
   def __call__(
           self,
           inputs: Array,
-          initial_state : Optional[List[StateType]],
-          initial_state_t: int = 0) -> Tuple[List[StateType], Array]:
+          initial_state : Optional[List[StateType]] = None,
+          initial_state_t: Optional[Scalar] = None) -> Tuple[List[StateType], Array]:
 
     if initial_state is None:
       initial_state = self.initial_state()
@@ -248,7 +253,7 @@ class RNN(eqx.Module, Generic[StateType]):
             ) -> Tuple[Tuple[List[StateType], int], Tuple[List[StateType], Array]]:
       prev_state, t = carry
 
-      if initial_state_t != 0:
+      if initial_state_t is not None:
         prev_state = jax.lax.cond(
                 jnp.equal(initial_state_t, t),
                 lambda _: initial_state,
@@ -347,7 +352,7 @@ class BiRNN(eqx.Module, Generic[StateType]):
       self,
       inputs: Array,
       length: int,
-      initial_state: Optional[BiRNNState[StateType]]
+      initial_state: Optional[BiRNNState[StateType]] = None,
       ) -> Tuple[BiRNNState[StateType], Array]:
 
     if initial_state is None:

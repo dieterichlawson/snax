@@ -10,7 +10,7 @@ def test_basic_vanilla_rnn(hidden_sizes=[3,4,5], input_size=2, seq_len=11):
   inputs = jnp.ones([seq_len, input_size])
 
   def call(model, inputs):
-    return model(inputs, None)
+    return model(inputs)
 
   states, out = jax.jit(call)(rnn, inputs)
   assert out.shape == (seq_len, hidden_sizes[-1])
@@ -38,7 +38,7 @@ def test_basic_lstm(hidden_sizes=[3,4,5], input_size=2, seq_len=11):
   inputs = jnp.ones([seq_len, input_size])
 
   def call(model, inputs):
-    return model(inputs, None)
+    return model(inputs)
 
   states, out = jax.jit(call)(rnn, inputs)
   assert out.shape == (seq_len, hidden_sizes[-1])
@@ -70,7 +70,7 @@ def test_basic_gru(hidden_sizes=[3,4,5], input_size=2, seq_len=11):
   inputs = jnp.ones([seq_len, input_size])
 
   def call(model, inputs):
-    return model(inputs, None)
+    return model(inputs)
 
   states, out = jax.jit(call)(rnn, inputs)
   assert out.shape == (seq_len, hidden_sizes[-1])
@@ -104,7 +104,7 @@ def test_batch_gru(
   lengths =  jnp.array(lengths)
 
   def call(model, inputs):
-    return model(inputs, None)
+    return model(inputs)
 
   states, out = jax.vmap(call, in_axes=(None, 0))(rnn, inputs)
   assert out.shape == (batch_size, seq_len, hidden_sizes[-1])
@@ -145,7 +145,7 @@ def test_identity_vanilla_rnn(num_layers=3, input_size=2, seq_len=5):
           b_init=jax.nn.initializers.zeros)
 
   inputs = jnp.arange(seq_len * input_size).reshape([seq_len, input_size])
-  states, out = rnn(inputs, None)
+  states, out = rnn(inputs)
   state_check = inputs
   for state in states:
     state_check = jnp.cumsum(state_check, axis=0)
@@ -185,7 +185,7 @@ def test_identity_lstm():
           b_init=jax.nn.initializers.zeros,
           forget_gate_bias_init=0.)
   inputs = jnp.arange(seq_len * input_size).reshape([seq_len, input_size])
-  states, _ = rnn(inputs, None)
+  states, _ = rnn(inputs)
   states = states[0]
   true_hiddens = jnp.array([0, 1, 36, 39*(39*12 + 39**2)], dtype=jnp.float32)
   true_cells = jnp.array([0, 1, 12, 39*12 + 39**2], dtype=jnp.float32)
