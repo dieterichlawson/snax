@@ -1,6 +1,10 @@
 import dill as pickle
 from pathlib import Path
 from typing import TypeVar, Any, List, Optional, Tuple, Union
+import types
+import dataclasses
+import jax
+import jaxlib
 
 Data = TypeVar('Data')
 
@@ -67,3 +71,43 @@ def save_checkpoint_to_path(data: Any, step: int, path: Path) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   with path.open(mode='wb') as f:
     pickle.dump((data, step), f)
+
+
+def get_static_fields(model):
+  fields = set()
+  for f in dataclasses.fields(model):
+    if 'static' in f.metadata and f.metadata['static']:
+      fields.add(f.name)
+  return fields
+
+
+def assert_static_fields_same(x, y):
+  x_fields = get_static_fields(x)
+  y_fields = get_static_fields(y)
+  x_dict = dataclasses.asdict(x)
+  y_dict = dataclasses.asdict(y)
+  assert x_fields == y_fields
+  for f in x_fields:
+    x_f = x_dict[f]
+    y_f = y_dict[f]
+    if (isinstance(x_f, types.FunctionType) or
+        isinstance(x_f, jaxlib.xla_extension.CompiledFunction)):
+      # It's a function so there's nothing we can do.
+      pass
+    else:
+      assert x_f == y_f, "%s != %s" % (x_dict[f], y_dict[f])
+
+def load_latest_checkpoint_with_model(
+        model: Any,
+        checkpoint_dir: str,
+        name_prefix: str = "checkpoint",
+        filetype: str = ".chk") -> Union[Tuple[Any, int], Tuple[None, None]]:
+  path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
+  if path is None:
+    return None, None
+  _, model_treedef = jax.tree_util.tree_flatten(model)
+  new_model, step = load_checkpoint_from_path(path)
+  loaded_leaves, _ = jax.tree_util.tree_flatten(new_model)
+  restored_model = model_treedef.unflatten(loaded_leaves)
+  assert_static_fields_same(model, new_model)
+  return restored_model, step
