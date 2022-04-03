@@ -1,6 +1,6 @@
 import dill as pickle
 from pathlib import Path
-from typing import TypeVar, Any, List, Optional, Tuple, Union
+from typing import TypeVar, Any, List, Optional, Tuple
 import types
 import dataclasses
 import jax
@@ -56,10 +56,10 @@ def get_latest_checkpoint_path(
 def load_latest_checkpoint(
         checkpoint_dir: str,
         name_prefix: str = "checkpoint",
-        filetype: str = ".chk") -> Union[Tuple[Any, int], Tuple[None, None]]:
+        filetype: str = ".chk") -> Optional[Tuple[Any, int]]:
   path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if path is None:
-    return None, None
+    return None
   return load_checkpoint_from_path(path)
 
 def load_checkpoint_from_path(path: Path) -> Tuple[Any, int]:
@@ -97,14 +97,15 @@ def assert_static_fields_same(x, y):
     else:
       assert x_f == y_f, "%s != %s" % (x_dict[f], y_dict[f])
 
+
 def load_latest_checkpoint_with_model(
         model: Any,
         checkpoint_dir: str,
         name_prefix: str = "checkpoint",
-        filetype: str = ".chk") -> Union[Tuple[Any, int], Tuple[None, None]]:
+        filetype: str = ".chk") -> Optional[Tuple[Any, int]]:
   path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if path is None:
-    return None, None
+    return None
   _, model_treedef = jax.tree_util.tree_flatten(model)
   new_model, step = load_checkpoint_from_path(path)
   loaded_leaves, _ = jax.tree_util.tree_flatten(new_model)
