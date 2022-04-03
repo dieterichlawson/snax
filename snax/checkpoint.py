@@ -1,9 +1,17 @@
-import pickle
+import dill as pickle
 from pathlib import Path
+from typing import TypeVar, Any, List, Optional, Tuple, Union
 
-def save_checkpoint(data, step, checkpoint_dir,
-        num_checkpoints_to_keep=3, name_prefix="checkpoint",
-        step_format="{step:08d}", filetype=".chk"):
+Data = TypeVar('Data')
+
+def save_checkpoint(
+        data: Any,
+        step: int,
+        checkpoint_dir: str,
+        num_checkpoints_to_keep: int = 3,
+        name_prefix: str = "checkpoint",
+        step_format: str = "{step:08d}",
+        filetype: str = ".chk") -> None:
   existing_checkpoints = get_checkpoints(
           checkpoint_dir,
           name_prefix=name_prefix,
@@ -19,15 +27,21 @@ def save_checkpoint(data, step, checkpoint_dir,
   new_path = Path(checkpoint_dir) / new_name
   save_checkpoint_to_path(data, step, new_path)
 
-def get_checkpoints(checkpoint_dir, name_prefix="checkpoint", filetype=".chk"):
+def get_checkpoints(
+        checkpoint_dir: str,
+        name_prefix: str = "checkpoint",
+        filetype: str = ".chk") -> List[Path]:
   checkpoint_glob = name_prefix + '*' + filetype
   checkpoint_paths = Path(checkpoint_dir).glob(checkpoint_glob)
   return list(checkpoint_paths)
 
-def step_from_path(path):
+def step_from_path(path: Path) -> int:
   return int(path.stem.split("_")[1])
 
-def get_latest_checkpoint_path(checkpoint_dir, name_prefix="checkpoint", filetype=".chk"):
+def get_latest_checkpoint_path(
+        checkpoint_dir: str,
+        name_prefix: str = "checkpoint",
+        filetype: str = ".chk") -> Optional[Path]:
   paths = get_checkpoints(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if len(paths) == 0:
     return None
@@ -35,18 +49,21 @@ def get_latest_checkpoint_path(checkpoint_dir, name_prefix="checkpoint", filetyp
   max_ind = steps.index(max(steps))
   return paths[max_ind]
 
-def load_latest_checkpoint(checkpoint_dir, name_prefix="checkpoint", filetype=".chk"):
+def load_latest_checkpoint(
+        checkpoint_dir: str,
+        name_prefix: str = "checkpoint",
+        filetype: str = ".chk") -> Union[Tuple[Any, int], Tuple[None, None]]:
   path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if path is None:
-    return None
+    return None, None
   return load_checkpoint_from_path(path)
 
-def load_checkpoint_from_path(path):
+def load_checkpoint_from_path(path: Path) -> Tuple[Any, int]:
   with path.open(mode='rb') as f:
     data, step = pickle.load(f)
   return data, step
 
-def save_checkpoint_to_path(data, step, path):
+def save_checkpoint_to_path(data: Any, step: int, path: Path) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   with path.open(mode='wb') as f:
     pickle.dump((data, step), f)

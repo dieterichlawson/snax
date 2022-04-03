@@ -3,6 +3,7 @@ import tempfile
 import jax
 import jax.numpy as jnp
 from . import checkpoint
+from . import recurrent
 
 def test_checkpoint_dir_not_exists():
   data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
@@ -22,6 +23,29 @@ def test_checkpoint():
     reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(dirname)
     assert jnp.allclose(data, reloaded_data)
     assert step == reloaded_step
+
+def test_checkpoint_rnn():
+  model = recurrent.LSTMCell(jax.random.PRNGKey(0), 2, 3, forget_gate_bias_init=12.)
+  step = 1
+  with tempfile.TemporaryDirectory() as dirname:
+    checkpoint.save_checkpoint(model, 1, dirname)
+    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint(dirname)
+    assert reloaded_data is not None, "Checkpoint loading failed."
+    def assert_close(x, y):
+      assert jnp.allclose(x, y), "%s, %s" % (str(x), str(y))
+
+    # Check that the parameters are the same
+    flat_model, _ = jax.tree_util.tree_flatten(model)
+    flat_reloaded, _ = jax.tree_util.tree_flatten(reloaded_data)
+    [assert_close(x, y) for x,y in zip(flat_model, flat_reloaded)]
+    # Check the step is the same
+    assert step == reloaded_step
+    initial_state = model.initial_state()
+    # Check that the reloaded checkpoint computes the same function
+    model_outs, _ = jax.tree_util.tree_flatten(model(initial_state, jnp.ones(2)))
+    check_outs, _ = jax.tree_util.tree_flatten(reloaded_data(initial_state, jnp.ones(2)))
+    [assert_close(x, y) for x, y in zip(model_outs, check_outs)]
+
 
 def test_checkpoint_multi():
   datas = [jax.random.uniform(jax.random.PRNGKey(i), shape=[10,10]) for i in range(3)]
