@@ -1,4 +1,9 @@
-from typing import Tuple, TypeVar, Protocol
+from typing import Tuple, TypeVar
+
+try:
+  from typing import Protocol
+except ImportError:
+  from typing_extensions import Protocol
 
 from chex import Array
 
