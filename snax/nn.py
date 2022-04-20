@@ -174,7 +174,9 @@ class MLP(eqx.Module):
     return inputs
 
 
-class VmapModel:
+class VmapModel(eqx.Module):
+
+  models: eqx.Module
 
   def __init__(
       self,
