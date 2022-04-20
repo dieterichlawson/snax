@@ -4,7 +4,7 @@ import equinox as eqx
 
 from jax._src.random import KeyArray as PRNGKey
 from chex import Array
-from typing import List, Callable
+from typing import List, Callable, Optional
 
 from jax.nn.initializers import glorot_normal, zeros
 
@@ -85,7 +85,7 @@ class Dense(eqx.Module):
                key: PRNGKey,
                in_dim: int,
                out_dim: int,
-               act_fn: ActivationFn=jax.nn.relu,
+               act_fn: Optional[ActivationFn] = jax.nn.relu,
                W_init=glorot_normal(),
                b_init=zeros):
     """Create a dense layer.
@@ -100,6 +100,8 @@ class Dense(eqx.Module):
     """
 
     self.aff = Affine(key, in_dim, out_dim, W_init=W_init, b_init=b_init)
+    if act_fn is None:
+      act_fn = lambda x: x
     self.act_fn = act_fn
 
   def __call__(self, inputs: Array) -> Array:
