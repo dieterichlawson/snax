@@ -9,7 +9,7 @@ def test_vmapped_affine():
   in_dim = 4
   out_dim = 5
   model = nn.VmapModel(key, num_models, nn.Affine, in_dim, out_dim)
-  inputs = jnp.ones(in_dim)
+  inputs = jnp.ones((num_models, in_dim))
   outs = model(inputs)
   assert outs.shape == (num_models, out_dim)
 
@@ -19,7 +19,7 @@ def test_vmapped_linear():
   in_dim = 4
   out_dim = 5
   model = nn.VmapModel(key, num_models, nn.Linear, in_dim, out_dim)
-  inputs = jnp.ones(in_dim)
+  inputs = jnp.ones((num_models, in_dim))
   outs = model(inputs)
   assert outs.shape == (num_models, out_dim)
 
@@ -29,7 +29,7 @@ def test_vmapped_dense():
   in_dim = 4
   out_dim = 5
   model = nn.VmapModel(key, num_models, nn.Dense, in_dim, out_dim, act_fn=jax.nn.relu)
-  inputs = jnp.ones(in_dim)
+  inputs = jnp.ones((num_models, in_dim))
   outs = model(inputs)
   assert outs.shape == (num_models, out_dim)
 
@@ -40,8 +40,8 @@ def test_vmapped_mlp():
   out_dim = 5
   model = nn.VmapModel(key, num_models, nn.MLP, in_dim, layer_dims=[32, 32, out_dim],
           act_fn=jax.nn.relu)
-  input = jnp.ones(in_dim)
-  outs = model(input)
+  inputs = jnp.ones((num_models, in_dim))
+  outs = model(inputs)
   assert outs.shape == (num_models, out_dim)
 
 def test_vmapped_made():
@@ -53,6 +53,6 @@ def test_vmapped_made():
   act_fn = jax.nn.relu
   model = nn.VmapModel(key, num_models, made.ResMADE,
           data_dim, hidden_dim, num_res_blocks, act_fn=act_fn)
-  inputs = jnp.ones(data_dim)
+  inputs = jnp.ones((num_models, data_dim))
   outs = model(inputs)
   assert outs.shape == (num_models, data_dim)

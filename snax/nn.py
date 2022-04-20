@@ -188,5 +188,5 @@ class VmapModel:
     self.models = jax.vmap(model_constructor)(keys)
 
   def __call__(self, *args, **kwargs):
-    f = lambda m: m.__call__(*args, **kwargs)
-    return jax.vmap(f)(self.models)
+    f = lambda m, *args: m.__call__(*args, **kwargs)
+    return jax.vmap(f)(self.models, *args)
