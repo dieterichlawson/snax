@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="snax",
-    version="0.0.8",
+    version="0.0.9",
     author="Dieterich Lawson",
     author_email="dieterich.lawson@gmail.com",
     description="A simple deep learning library for JAX.",

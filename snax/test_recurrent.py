@@ -150,7 +150,30 @@ def test_identity_vanilla_rnn(num_layers=3, input_size=2, seq_len=5):
   for state in states:
     state_check = jnp.cumsum(state_check, axis=0)
     assert jnp.allclose(state.hidden, state_check)
+    print(state_check)
   assert jnp.allclose(out, state_check)
+
+
+def test_identity_reverse_vanilla_rnn(num_layers=3, input_size=2, seq_len=5):
+  key = jax.random.PRNGKey(0)
+  rnn = recurrent.VanillaRNN(
+          key,
+          input_size,
+          [input_size] * (num_layers-1),
+          act_fn=jax.nn.relu,
+          input_W_init=utils.identity_init,
+          recurrent_W_init=utils.identity_init,
+          b_init=jax.nn.initializers.zeros)
+
+  inputs = jnp.arange(seq_len * input_size).reshape([seq_len, input_size])
+  states, out = rnn(inputs, reverse=True)
+  state_check = jnp.flip(inputs, axis=0)
+  for state in states:
+    state_check = jnp.cumsum(state_check, axis=0)
+    assert jnp.allclose(state.hidden, jnp.flip(state_check, axis=0)), f"{state_check}, {state.hidden}"
+    print(jnp.flip(state_check, axis=0))
+  assert jnp.allclose(out, jnp.flip(state_check, axis=0))
+
 
 def test_identity_lstmcell():
   input_size=1

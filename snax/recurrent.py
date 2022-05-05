@@ -242,7 +242,8 @@ class RNN(eqx.Module, Generic[StateType]):
           self,
           inputs: Array,
           initial_state : Optional[List[StateType]] = None,
-          initial_state_t: Optional[Scalar] = None) -> Tuple[List[StateType], Array]:
+          initial_state_t: Optional[Scalar] = None,
+          reverse=False) -> Tuple[List[StateType], Array]:
 
     if initial_state is None:
       initial_state = self.initial_state()
@@ -264,7 +265,7 @@ class RNN(eqx.Module, Generic[StateType]):
       return (new_state, t+1), (new_state, out)
 
 
-    _, (states, outputs) = jax.lax.scan(scan_body, (initial_state, 0), inputs)
+    _, (states, outputs) = jax.lax.scan(scan_body, (initial_state, 0), inputs, reverse=reverse)
 
     return states, outputs
 
