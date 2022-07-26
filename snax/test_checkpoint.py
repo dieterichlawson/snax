@@ -49,10 +49,12 @@ def test_checkpoint_rnn():
 
 def test_checkpoint_rnn2():
   model = recurrent.LSTMCell(jax.random.PRNGKey(0), 2, 3, forget_gate_bias_init=12.)
+  _, model_treedef = jax.tree_util.tree_flatten(model)
   step = 1
   with tempfile.TemporaryDirectory() as dirname:
     checkpoint.save_checkpoint(model, 1, dirname)
-    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint_with_model(model, dirname)
+    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint_with_treedef(
+            model_treedef, dirname)
 
     assert reloaded_data is not None, "Checkpoint loading failed."
     def assert_close(x, y):
@@ -116,3 +118,19 @@ def test_removing_checkpoint():
     assert 3 in steps
     assert 4 in steps
     assert 5 in steps
+
+
+def test_load_checkpoint_with_treedef():
+  data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
+  with tempfile.TemporaryDirectory() as dirname:
+    checkpoint.save_checkpoint(data, 1, dirname)
+    _, treedef = jax.tree_util.tree_flatten(data)
+    reloaded_data, _ = checkpoint.load_latest_checkpoint_with_treedef(treedef, dirname)
+    assert reloaded_data is not None
+
+    def for_body(i, val):
+      return val + reloaded_data[i]
+
+    reloaded_sum = jax.lax.fori_loop(0, 10, for_body, jnp.zeros([10]))
+    true_sum = jnp.sum(data, axis=0)
+    assert jnp.allclose(reloaded_sum, true_sum)
