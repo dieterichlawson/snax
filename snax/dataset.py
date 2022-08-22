@@ -8,7 +8,7 @@ from chex import Scalar, Array, ArrayTree
 from typing import TypeVar, Generic, Tuple, Callable, Optional
 from jax._src.random import KeyArray as PRNGKey
 
-D = TypeVar('D', bound=ArrayTree)
+D = TypeVar('D', bound=Optional[ArrayTree])
 E = TypeVar('E', bound=ArrayTree)
 
 class IteratorState(eqx.Module):
@@ -119,3 +119,11 @@ class InMemDataset(Generic[D]):
         while_pred, while_body, (jnp.array(False), init_acc, init_state))
 
     return out
+
+class DummyDataset:
+
+  def init_state(self, _: PRNGKey):
+    return None
+
+  def next(self, _):
+    return None, None, None, None
