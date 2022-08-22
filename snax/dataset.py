@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 import equinox as eqx
@@ -10,26 +11,26 @@ from jax._src.random import KeyArray as PRNGKey
 D = TypeVar('D', bound=ArrayTree)
 E = TypeVar('E', bound=ArrayTree)
 
-class InMemDataset(eqx.Module, Generic[D]):
-  """An in-memory dataset iterator meant for use with JAX."""
+class IteratorState(eqx.Module):
 
   key: PRNGKey
   cursor: Scalar
   inds: Array
 
-  batch_size: int = eqx.static_field()
-  shuffle: bool = eqx.static_field()
-  num_data_points: int = eqx.static_field()
-  num_batches: int = eqx.static_field()
-  data: D = eqx.static_field()
+@dataclass
+class InMemDataset(Generic[D]):
+  """An in-memory dataset iterator meant for use with JAX under JIT."""
+
+  batch_size: int
+  shuffle: bool
+  num_data_points: int
+  num_batches: int
+  data: D
 
   def __init__(self,
           data: D,
           batch_size: int,
-          shuffle: bool = False,
-          key: Optional[PRNGKey] = None,
-          cursor: Optional[Scalar] = None,
-          inds: Optional[Array] = None):
+          shuffle: bool = False):
     leading_dims = jax.tree_util.tree_map(lambda x: x.shape[0], data)
     leading_dims, _ = jax.tree_util.tree_flatten(leading_dims)
     assert all([x == leading_dims[0] for x in leading_dims]), \
@@ -39,21 +40,9 @@ class InMemDataset(eqx.Module, Generic[D]):
     self.num_batches = math.ceil(float(self.num_data_points) / float(batch_size))
     self.data = data
     self.shuffle = shuffle
-    assert not (shuffle and key is None), \
-      "To shuffle the dataset, you must provide a key."
-    if key is not None:
-      self.key = key
-    else:
-      self.key = jax.random.PRNGKey(0)
-    if cursor is not None:
-      self.cursor = cursor
-    else:
-      self.cursor = 0
-    if inds is not None:
-      self.inds = inds
-    else:
-      self.inds = self._sample_inds(self.key)
 
+  def init_state(self, key: PRNGKey) -> IteratorState:
+    return IteratorState(key, jnp.array(0), self._sample_inds(key))
 
   def _sample_inds(self, key: PRNGKey) -> Array:
     inds_size = self.batch_size * self.num_batches
@@ -67,65 +56,66 @@ class InMemDataset(eqx.Module, Generic[D]):
     else:
       return jnp.arange(inds_size, dtype=jnp.int32)
 
-  def _next_state(self) -> Tuple[Scalar, PRNGKey, Array]:
+  def _next_state(self, cur_state: IteratorState) -> IteratorState:
 
-    def new_state(
-            _cursor: Scalar,
-            key: PRNGKey,
-            _inds: Array) -> Tuple[Scalar, PRNGKey, Array]:
-      key, _ = jax.random.split(key)
-      return 0, key, self._sample_inds(key)
+    def new_epoch_state(state: IteratorState) -> IteratorState:
+      _, key = jax.random.split(state.key)
+      return IteratorState(key, jnp.array(0), self._sample_inds(key))
 
-    new_cursor, new_key, new_inds = jax.lax.cond(
-        jnp.greater_equal(self.cursor, self.num_batches - 1),
-        new_state,
-        lambda c, k, i: (c + 1, k, i),
-        self.cursor, self.key, self.inds)
-    return new_cursor, new_key, new_inds
+    def same_epoch_state(state: IteratorState) -> IteratorState:
+      return IteratorState(state.key, state.cursor + 1, state.inds)
 
-  def next(self) -> Tuple[D, Array, Scalar, InMemDataset[D]]:
-    start_i = self.cursor * self.batch_size
+    next_state = jax.lax.cond(
+        jnp.greater_equal(cur_state.cursor, self.num_batches - 1),
+        new_epoch_state,
+        same_epoch_state,
+        cur_state)
+
+    return next_state
+
+  def next(self, state: IteratorState) -> Tuple[D, Array, Scalar, IteratorState]:
+    start_i = state.cursor * self.batch_size
     data_is = jax.lax.dynamic_slice_in_dim(
-        self.inds, start_i, self.batch_size, axis=0)
+        state.inds, start_i, self.batch_size, axis=0)
     indexed_data = jax.tree_util.tree_map(lambda x: x[data_is], self.data)
-    last_batch = jnp.equal(self.cursor, self.num_batches - 1)
+    last_batch = jnp.equal(state.cursor, self.num_batches - 1)
     batch_remainder = self.num_data_points % self.batch_size
     mask = jnp.where(
         jnp.logical_and(last_batch, batch_remainder > 0),
         jnp.arange(self.batch_size, dtype=jnp.int32) < batch_remainder,
         jnp.ones(self.batch_size, dtype=jnp.int32))
-    new_cursor, new_key, new_inds = self._next_state()
-    new_ds = InMemDataset(
-        self.data, self.batch_size,
-        shuffle=self.shuffle, key=new_key, cursor=new_cursor, inds=new_inds)
-    return indexed_data, mask, last_batch, new_ds
+    new_state = self._next_state(state)
+    return indexed_data, mask, last_batch, new_state
 
-  def batch_sum_reduce(self, f: Callable[[D], E], init_acc: Optional[E] = None) -> E:
+  def batch_sum_reduce(self,
+          f: Callable[[D], E],
+          init_acc: Optional[E] = None) -> E:
 
     def mask(m: Array, x: Array) -> Array:
       return jax.numpy.expand_dims(m, list(range(1, x.ndim))) * x
 
-    def while_pred(state: Tuple[Scalar, E, InMemDataset[D]]) -> Scalar:
+    def while_pred(state: Tuple[Scalar, E, IteratorState]) -> Scalar:
       last_batch, _, _ = state
       return jnp.logical_not(last_batch)
 
-    def while_body(
-            state: Tuple[Scalar, E, InMemDataset[D]]
-            ) -> Tuple[Scalar, E, InMemDataset[D]]:
-      _, acc, ds = state
-      batch, m, lb, ds = ds.next()
+    def while_body(state: Tuple[Scalar, E, IteratorState]) -> Tuple[Scalar, E, IteratorState]:
+      _, acc, s = state
+      batch, m, lb, new_s = self.next(s)
       outs = jax.vmap(f)(batch)
-      outs_masked = jax.tree_map(lambda x: mask(m, x), outs)
-      outs_summed = jax.tree_map(lambda x: jnp.sum(x, axis=0), outs_masked)
-      new_acc = jax.tree_map(lambda a, x: a + x, acc, outs_summed)
-      return lb, new_acc, ds
+      outs_masked = jax.tree_util.tree_map(lambda x: mask(m, x), outs)
+      outs_summed = jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0), outs_masked)
+      new_acc = jax.tree_util.tree_map(lambda a, x: a + x, acc, outs_summed)
+      return lb, new_acc, new_s
+
+    # We're reducing over the whole dataset so order (and key) doesn't matter.
+    init_state = self.init_state(jax.random.PRNGKey(0))
 
     if init_acc is None:
-      b, _, _, _ = self.next()
-      outs = jax.tree_map(lambda x: jnp.sum(x, axis=0), jax.vmap(f)(b))
-      init_acc = jax.tree_map(lambda x: jnp.zeros_like(x), outs)
+      b, _, _, _ = self.next(init_state)
+      outs = jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0), jax.vmap(f)(b))
+      init_acc = jax.tree_util.tree_map(lambda x: jnp.zeros_like(x), outs)
 
     _, out, _ = jax.lax.while_loop(
-        while_pred, while_body, (jnp.array(False), init_acc, self))
+        while_pred, while_body, (jnp.array(False), init_acc, init_state))
 
     return out
