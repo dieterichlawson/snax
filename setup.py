@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="snax",
-    version="0.0.13",
+    version="0.0.14",
     author="Dieterich Lawson",
     author_email="dieterich.lawson@gmail.com",
     description="A simple deep learning library for JAX.",
@@ -19,7 +19,8 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-          'jax', 'jaxlib', 'tensorflow_probability', 'chex', 'typing_extensions', 'dill'
+          'jax', 'jaxlib', 'tensorflow_probability', 'chex', 'typing_extensions', 'dill',
+          'equinox', 'optax', 'wandb'
       ],
     python_requires='>=3.7',
 )

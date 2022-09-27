@@ -312,18 +312,22 @@ BiRNNState = List[BiRNNCellState[StateType]]
 class BiRNN(eqx.Module, Generic[StateType]):
 
   cells: List[BiRNNCell[StateType]]
+  in_dim: int = eqx.static_field()
+  out_dim: int = eqx.static_field()
 
   def __init__(self,
                key: PRNGKey,
                input_dim: int,
                hidden_dims: List[int],
                cell_constructor: RNNCellConstructor[StateType]):
+    self.in_dim = input_dim
     in_dims = [input_dim] + [x*2 for x in hidden_dims]
     dims = zip(in_dims, hidden_dims)
     self.cells = []
     for in_dim, hid_dim in dims:
       key, sk = jax.random.split(key)
       self.cells.append(BiRNNCell(sk, in_dim, hid_dim, cell_constructor))
+    self.out_dim = self.cells[-1].out_dim
 
   def initial_state(self) -> BiRNNState[StateType]:
     return [cell.initial_state() for cell in self.cells]

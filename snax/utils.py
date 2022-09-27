@@ -25,7 +25,7 @@ def register_dataclass(cls):
     print("%s is already registered as JAX PyTree node.", cls)
   return cls
 
-def identity_init(key, shape, dtype=jnp.float_):
+def identity_init(key, shape, dtype=jnp.float32):
   assert len(shape) == 2
   return jnp.eye(shape[0], M=shape[1], dtype=dtype)
 
