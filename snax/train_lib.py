@@ -61,13 +61,14 @@ def repeat_step(
   return jax.lax.fori_loop(step, step + num_inner_steps, for_step, (params, 0., state))
 
 
+class TrainStepState(eqx.Module):
+  key: PRNGKey
+  opt_state: OptState
+  itr_state: IteratorState
+
+
 class TrainStep:
   """A function that minimizes a LossFn."""
-
-  class State(eqx.Module):
-    key: PRNGKey
-    opt_state: OptState
-    itr_state: IteratorState
 
   def __init__(
       self,
@@ -118,7 +119,7 @@ class TrainStep:
     def _step_fn(
           step: int,
           params: optax.Params,
-          state: TrainStep.State) -> Tuple[Params, float, TrainStep.State]:
+          state: TrainStepState) -> Tuple[Params, float, TrainStepState]:
       key, subkey = jax.random.split(state.key)
       data, mask, _, new_itr_state =  self.dataset.next(state.itr_state)
       loss_val, grads = grad_loss(key, step, params, data, mask)
@@ -127,7 +128,7 @@ class TrainStep:
         grads = jax.tree_util.tree_map(lambda x: jax.lax.pmean(x, 'b'), grads)
       updates, new_opt_state = optimizer.update(grads, state.opt_state, params=params)
       params = optax.apply_updates(params, updates)
-      return params, loss_val, TrainStep.State(subkey, new_opt_state, new_itr_state)
+      return params, loss_val, TrainStepState(subkey, new_opt_state, new_itr_state)
 
     if num_inner_steps > 1:
       step_fn = partial(repeat_step, _step_fn, num_inner_steps)
@@ -140,7 +141,7 @@ class TrainStep:
       self.step_fn = jax.jit(step_fn)
 
 
-  def init_state(self, key, init_params) -> TrainStep.State:
+  def init_state(self, key, init_params) -> TrainStepState:
     num_devices = jax.local_device_count()
     state_list = []
     for i in range(num_devices):
@@ -148,7 +149,7 @@ class TrainStep:
       k, sk = jax.random.split(k)
       itr_state = self.dataset.init_state(sk)
       opt_state = self.optimizer.init(init_params)
-      state_list.append(self.State(k, opt_state, itr_state))
+      state_list.append(TrainStepState(k, opt_state, itr_state))
 
     if self.parallelize:
       res = jax.device_put_sharded(state_list, jax.local_devices())
@@ -160,7 +161,7 @@ class TrainStep:
           self,
           step: int,
           params: Params,
-          state: State) -> Tuple[Params, Scalar, TrainStep.State]:
+          state: TrainStepState) -> Tuple[Params, Scalar, TrainStepState]:
     """Run a step of training.
 
     Args:
