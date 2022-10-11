@@ -242,7 +242,7 @@ def train_alternating(
 
   # Maybe load a checkpoint.
   if checkpoint_dir is not None and checkpoint_every is not None:
-    _, treedef = jax.tree_util.tree_flatten((params, step_states))
+    _, treedef = jax.tree_util.tree_flatten((params, step_states, local_steps))
     out = chk.load_latest_checkpoint_with_treedef(treedef, checkpoint_dir)
     if out[0] is not None:
       (params, step_states, local_steps), global_start_step = out
@@ -268,7 +268,7 @@ def train_alternating(
       params, loss_val, new_state = train_step_fn(local_step, params, state)
       loss_val.block_until_ready()
       sec = timer() - start_time
-      step_metrics = {'steps_per_sec': train_step_fn.num_inner_steps / sec,
+      step_metrics = {'perf/steps_per_sec': train_step_fn.num_inner_steps / sec,
                       'loss': loss_val}
       metrics[train_step_fn.name] = step_metrics
       step += train_step_fn.num_inner_steps
@@ -284,7 +284,7 @@ def train_alternating(
         print(f"Step {step}")
         for loss_name, loss_metrics in metrics.items():
           loss_val = loss_metrics['loss']
-          sps = loss_metrics['steps_per_sec']
+          sps = loss_metrics['perf/steps_per_sec']
           print(f"  {loss_name}: {loss_val:0.3f}, steps/sec {sps:0.2f}")
         # Compute summaries
         summ_start_time = timer()
