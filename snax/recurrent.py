@@ -7,7 +7,7 @@ from jax._src.random import KeyArray as PRNGKey
 from typing import TypeVar, Tuple, Callable, Generic, List, Optional
 from chex import Array, Scalar
 
-from .utils import flip_first_n, register_dataclass
+from .utils import register_dataclass
 from .nn import Linear, Affine
 from .base import RecurrentCell
 
@@ -296,30 +296,32 @@ class BiRNN(eqx.Module, Generic[StateType]):
       in_dim = fwd_cell.out_dim + bwd_cell.out_dim
     self.out_dim = self.fwd_cells[-1].out_dim + self.bwd_cells[-1].out_dim
 
-  def initial_state(self) -> List[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]]:
+  def initial_state(self) -> List[Tuple[StateType, StateType]]:
     return [(f.initial_state(), b.initial_state()) for (f, b) in zip(self.fwd_cells, self.bwd_cells)]
 
   def apply_one_layer(
       self,
       l: int,
       inputs: Array,
-      initial_state: Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]
-      ) -> Tuple[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]], Array]:
+      initial_state: Tuple[StateType, StateType]
+      ) -> Tuple[Tuple[StateType, StateType], Array]:
 
     assert l >= 0 and l < len(self.fwd_cells), "Tried to apply non-existent layer"
 
     def scan_fn(
         cell: RecurrentCell[StateType],
-        prev_state: RecurrentCell[StateType],
+        prev_state: StateType,
         inputs: Array
-        ) -> Tuple[RecurrentCell[StateType], Tuple[RecurrentCell[StateType], Array]]:
+        ) -> Tuple[StateType, Tuple[StateType, Array]]:
       new_state, outs = cell(prev_state, inputs)
       return new_state, (new_state, outs)
 
-    def fwd_scan(prev_state, inputs):
+    def fwd_scan(prev_state: StateType, inputs: Array
+            ) -> Tuple[StateType, Tuple[StateType, Array]]:
       return scan_fn(self.fwd_cells[l], prev_state, inputs)
 
-    def bwd_scan(prev_state, inputs):
+    def bwd_scan(prev_state: StateType, inputs: Array
+            ) -> Tuple[StateType, Tuple[StateType, Array]]:
       return scan_fn(self.bwd_cells[l], prev_state, inputs)
 
     _, (fwd_states, fwd_outs) = jax.lax.scan(fwd_scan, initial_state[0], inputs)
@@ -332,8 +334,8 @@ class BiRNN(eqx.Module, Generic[StateType]):
       self,
       inputs: Array,
       length: int,
-      initial_state: Optional[List[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]]] = None,
-      ) -> Tuple[List[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]], Array]:
+      initial_state: Optional[List[Tuple[StateType, StateType]]] = None,
+      ) -> Tuple[List[Tuple[StateType, StateType]], Array]:
 
     if initial_state is None:
       initial_state = self.initial_state()
