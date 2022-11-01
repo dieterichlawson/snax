@@ -270,48 +270,11 @@ class RNN(eqx.Module, Generic[StateType]):
     return states, outputs
 
 
-BiRNNCellState = Tuple[StateType, StateType]
-
-
-class BiRNNCell(eqx.Module, Generic[StateType]):
-
-  fwd_cell: RecurrentCell[StateType]
-  bwd_cell: RecurrentCell[StateType]
-
-  out_dim: int = eqx.static_field()
-
-  def __init__(self,
-               key: PRNGKey,
-               input_dim: int,
-               hidden_dim: int,
-               cell_constructor: RNNCellConstructor[StateType]):
-    k1, k2 = jax.random.split(key)
-    self.fwd_cell = cell_constructor(k1, input_dim, hidden_dim)
-    self.bwd_cell = cell_constructor(k2, input_dim, hidden_dim)
-    self.out_dim = self.fwd_cell.out_dim + self.bwd_cell.out_dim
-
-  def initial_state(self) -> BiRNNCellState[StateType]:
-    return (self.fwd_cell.initial_state(), self.bwd_cell.initial_state())
-
-  def __call__(self,
-               prev_state: BiRNNCellState[StateType],
-               inputs: Tuple[Array, Array]
-               ) -> Tuple[BiRNNCellState[StateType], Array]:
-    fwd_state, bwd_state = prev_state
-    fwd_input, bwd_input = inputs
-    new_fwd_state, fwd_out = self.fwd_cell(fwd_state, fwd_input)
-    new_bwd_state, bwd_out = self.bwd_cell(bwd_state, bwd_input)
-    new_state = (new_fwd_state, new_bwd_state)
-    outs = jnp.concatenate([fwd_out, bwd_out], axis=0)
-    return new_state, outs
-
-
-BiRNNState = List[BiRNNCellState[StateType]]
-
-
 class BiRNN(eqx.Module, Generic[StateType]):
 
-  cells: List[BiRNNCell[StateType]]
+  fwd_cells: List[RecurrentCell[StateType]]
+  bwd_cells: List[RecurrentCell[StateType]]
+
   in_dim: int = eqx.static_field()
   out_dim: int = eqx.static_field()
 
@@ -321,54 +284,64 @@ class BiRNN(eqx.Module, Generic[StateType]):
                hidden_dims: List[int],
                cell_constructor: RNNCellConstructor[StateType]):
     self.in_dim = input_dim
-    in_dims = [input_dim] + [x*2 for x in hidden_dims]
-    dims = zip(in_dims, hidden_dims)
-    self.cells = []
-    for in_dim, hid_dim in dims:
-      key, sk = jax.random.split(key)
-      self.cells.append(BiRNNCell(sk, in_dim, hid_dim, cell_constructor))
-    self.out_dim = self.cells[-1].out_dim
+    in_dim = input_dim
+    self.fwd_cells = []
+    self.bwd_cells = []
+    for out_dim in hidden_dims:
+      key, sk1, sk2 = jax.random.split(key, num=3)
+      fwd_cell = cell_constructor(sk1, in_dim, out_dim)
+      bwd_cell = cell_constructor(sk2, in_dim, out_dim)
+      self.fwd_cells.append(fwd_cell)
+      self.bwd_cells.append(bwd_cell)
+      in_dim = fwd_cell.out_dim + bwd_cell.out_dim
+    self.out_dim = self.fwd_cells[-1].out_dim + self.bwd_cells[-1].out_dim
 
-  def initial_state(self) -> BiRNNState[StateType]:
-    return [cell.initial_state() for cell in self.cells]
+  def initial_state(self) -> List[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]]:
+    return [(f.initial_state(), b.initial_state()) for (f, b) in zip(self.fwd_cells, self.bwd_cells)]
 
   def apply_one_layer(
       self,
       l: int,
       inputs: Array,
-      length: int,
-      initial_state: BiRNNCellState[StateType]
-      ) -> Tuple[BiRNNCellState[StateType], Array]:
-    assert l >= 0 and l < len(self.cells), "Tried to apply non-existent layer"
+      initial_state: Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]
+      ) -> Tuple[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]], Array]:
+
+    assert l >= 0 and l < len(self.fwd_cells), "Tried to apply non-existent layer"
 
     def scan_fn(
-        prev_state: BiRNNCellState[StateType],
-        inputs: Tuple[Array, Array]
-        ) -> Tuple[BiRNNCellState[StateType], Tuple[BiRNNCellState[StateType], Array]]:
-      new_state, outs = self.cells[l](prev_state, inputs)
+        cell: RecurrentCell[StateType],
+        prev_state: RecurrentCell[StateType],
+        inputs: Array
+        ) -> Tuple[RecurrentCell[StateType], Tuple[RecurrentCell[StateType], Array]]:
+      new_state, outs = cell(prev_state, inputs)
       return new_state, (new_state, outs)
 
-    bwd_inputs = flip_first_n(inputs, length)
-    _, (states, outs) = jax.lax.scan(
-        scan_fn, initial_state, (inputs, bwd_inputs))
+    def fwd_scan(prev_state, inputs):
+      return scan_fn(self.fwd_cells[l], prev_state, inputs)
+
+    def bwd_scan(prev_state, inputs):
+      return scan_fn(self.bwd_cells[l], prev_state, inputs)
+
+    _, (fwd_states, fwd_outs) = jax.lax.scan(fwd_scan, initial_state[0], inputs)
+    _, (bwd_states, bwd_outs) = jax.lax.scan(bwd_scan, initial_state[1], inputs, reverse=True)
+    states = (fwd_states, bwd_states)
+    outs = jnp.concatenate([fwd_outs, bwd_outs], axis=1)
     return states, outs
 
   def __call__(
       self,
       inputs: Array,
       length: int,
-      initial_state: Optional[BiRNNState[StateType]] = None,
-      ) -> Tuple[BiRNNState[StateType], Array]:
+      initial_state: Optional[List[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]]] = None,
+      ) -> Tuple[List[Tuple[RecurrentCell[StateType], RecurrentCell[StateType]]], Array]:
 
     if initial_state is None:
       initial_state = self.initial_state()
 
     states = []
     layer_outs = inputs
-    for i in range(len(self.cells)):
-      layer_states, layer_outs = self.apply_one_layer(
-          i, layer_outs, length, initial_state[i]
-      )
+    for i in range(len(self.fwd_cells)):
+      layer_states, layer_outs = self.apply_one_layer(i, layer_outs, initial_state[i])
       states.append(layer_states)
     return states, layer_outs
 
