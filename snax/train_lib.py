@@ -86,7 +86,7 @@ class TrainStep:
 
     if parallelize:
       assert batch_size % jax.local_device_count() == 0, \
-        "num devices ({jax.local_device_count()}) must evenly divide batch_size ({batch_size})."
+        f"num devices ({jax.local_device_count()}) must evenly divide batch_size ({batch_size})."
       local_batch_size = batch_size // jax.local_device_count()
     else:
       local_batch_size = batch_size
@@ -110,7 +110,7 @@ class TrainStep:
       keys = jax.random.split(key, num=local_batch_size)
       losses = vm_loss_fn(keys, step, params, data)
       if mask is not None:
-        return jnp.mean(mask * losses)
+        return jnp.sum(jnp.where(mask, x=losses, y=jnp.zeros_like(losses))) / jnp.sum(mask)
       else:
         return jnp.mean(losses)
 
