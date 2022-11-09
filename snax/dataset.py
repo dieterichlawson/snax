@@ -31,6 +31,7 @@ class InMemDataset(Generic[D]):
           data: D,
           batch_size: int,
           shuffle: bool = False):
+    data = jax.tree_util.tree_map(jnp.array, data)
     leading_dims = jax.tree_util.tree_map(lambda x: x.shape[0], data)
     leading_dims, _ = jax.tree_util.tree_flatten(leading_dims)
     assert all([x == leading_dims[0] for x in leading_dims]), \
@@ -87,36 +88,50 @@ class InMemDataset(Generic[D]):
     new_state = self._next_state(state)
     return indexed_data, mask, last_batch, new_state
 
-  def batch_sum_reduce(self,
-          f: Callable[[D], E],
+
+  def batch_sum_reduce(self, f: Callable[[D], E], init_acc: Optional[E] = None) -> E:
+    return self.batch_sum_reduce_with_key(
+            jax.random.PRNGKey(0),
+            lambda _, d: f(d),
+            init_acc=init_acc)
+
+  def batch_sum_reduce_with_key(self,
+          key: PRNGKey,
+          f: Callable[[PRNGKey, D], E],
           init_acc: Optional[E] = None) -> E:
 
     def mask(m: Array, x: Array) -> Array:
-      return jax.numpy.expand_dims(m, list(range(1, x.ndim))) * x
+      m = jax.numpy.expand_dims(m, list(range(1, x.ndim)))
+      return jnp.where(m, x, jnp.zeros_like(x))
 
-    def while_pred(state: Tuple[Scalar, E, IteratorState]) -> Scalar:
-      last_batch, _, _ = state
+    def while_pred(state: Tuple[Scalar, PRNGKey, E, IteratorState]) -> Scalar:
+      last_batch, _, _, _ = state
       return jnp.logical_not(last_batch)
 
-    def while_body(state: Tuple[Scalar, E, IteratorState]) -> Tuple[Scalar, E, IteratorState]:
-      _, acc, s = state
+    def while_body(state: Tuple[Scalar, PRNGKey, E, IteratorState]
+            ) -> Tuple[Scalar, PRNGKey, E, IteratorState]:
+      _, key, acc, s = state
+      key, subkey = jax.random.split(key)
+      keys = jax.random.split(subkey, num=self.batch_size)
       batch, m, lb, new_s = self.next(s)
-      outs = jax.vmap(f)(batch)
+      outs = jax.vmap(f)(keys, batch)
       outs_masked = jax.tree_util.tree_map(lambda x: mask(m, x), outs)
       outs_summed = jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0), outs_masked)
       new_acc = jax.tree_util.tree_map(lambda a, x: a + x, acc, outs_summed)
-      return lb, new_acc, new_s
+      return lb, key, new_acc, new_s
 
     # We're reducing over the whole dataset so order (and key) doesn't matter.
     init_state = self.init_state(jax.random.PRNGKey(0))
 
     if init_acc is None:
       b, _, _, _ = self.next(init_state)
-      outs = jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0), jax.vmap(f)(b))
+      key, subkey = jax.random.split(key)
+      keys = jax.random.split(subkey, num=self.batch_size)
+      outs = jax.tree_util.tree_map(lambda x: jnp.sum(x, axis=0), jax.vmap(f)(keys, b))
       init_acc = jax.tree_util.tree_map(lambda x: jnp.zeros_like(x), outs)
 
-    _, out, _ = jax.lax.while_loop(
-        while_pred, while_body, (jnp.array(False), init_acc, init_state))
+    _, _, out, _ = jax.lax.while_loop(
+        while_pred, while_body, (jnp.array(False), key, init_acc, init_state))
 
     return out
 

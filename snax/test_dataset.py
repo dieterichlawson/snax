@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as onp
 from .dataset import InMemDataset
 import pytest
 import math
@@ -8,6 +9,13 @@ EVEN_SIZES = [(1, 100), (10, 100), (50, 100), (100, 100)]
 UNEVEN_SIZES = [(3, 100), (27, 100), (99, 100)]
 BIGGER_SIZES = [(101, 100), (120, 100), (200, 100)]
 ALL_SIZES = EVEN_SIZES + UNEVEN_SIZES + BIGGER_SIZES
+
+@pytest.mark.parametrize("batch_size,dataset_size", ALL_SIZES)
+def test_works_with_ordinary_numpy(batch_size, dataset_size):
+  data = onp.arange(1, dataset_size, dtype=jnp.int32)
+  ds = InMemDataset(data, batch_size)
+  tot = ds.batch_sum_reduce(lambda x: jnp.sum(x))
+  assert jnp.equal(tot, jnp.sum(data))
 
 
 @pytest.mark.parametrize("batch_size,dataset_size", ALL_SIZES)
