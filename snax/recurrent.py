@@ -301,12 +301,13 @@ class BiRNN(eqx.Module, Generic[StateType]):
 
   def apply_one_layer(
       self,
-      l: int,
+      layer_num: int,
       inputs: Array,
-      initial_state: Tuple[StateType, StateType]
+      initial_state: Tuple[StateType, StateType],
+      length: Optional[int] = None,
       ) -> Tuple[Tuple[StateType, StateType], Array]:
 
-    assert l >= 0 and l < len(self.fwd_cells), "Tried to apply non-existent layer"
+    assert layer_num >= 0 and layer_num < len(self.fwd_cells), "Tried to apply non-existent layer"
 
     def scan_fn(
         cell: RecurrentCell[StateType],
@@ -318,14 +319,27 @@ class BiRNN(eqx.Module, Generic[StateType]):
 
     def fwd_scan(prev_state: StateType, inputs: Array
             ) -> Tuple[StateType, Tuple[StateType, Array]]:
-      return scan_fn(self.fwd_cells[l], prev_state, inputs)
+      return scan_fn(self.fwd_cells[layer_num], prev_state, inputs)
 
     def bwd_scan(prev_state: StateType, inputs: Array
             ) -> Tuple[StateType, Tuple[StateType, Array]]:
-      return scan_fn(self.bwd_cells[l], prev_state, inputs)
+      return scan_fn(self.bwd_cells[layer_num], prev_state, inputs)
+
+    if length is not None:
+      bwd_inputs = flip_first_n(inputs, length)
+      reverse_scan = False
+    else:
+      bwd_inputs = inputs
+      reverse_scan = True
 
     _, (fwd_states, fwd_outs) = jax.lax.scan(fwd_scan, initial_state[0], inputs)
-    _, (bwd_states, bwd_outs) = jax.lax.scan(bwd_scan, initial_state[1], inputs, reverse=True)
+    _, (bwd_states, bwd_outs) = jax.lax.scan(bwd_scan, initial_state[1], bwd_inputs,
+            reverse=reverse_scan)
+
+    if length is not None:
+      bwd_states = jax.tree_util.tree_map(lambda x: flip_first_n(x, length), bwd_states)
+      bwd_outs = jax.tree_util.tree_map(lambda x: flip_first_n(x, length), bwd_outs)
+
     states = (fwd_states, bwd_states)
     outs = jnp.concatenate([fwd_outs, bwd_outs], axis=1)
     return states, outs
@@ -333,7 +347,7 @@ class BiRNN(eqx.Module, Generic[StateType]):
   def __call__(
       self,
       inputs: Array,
-      length: int,
+      length: Optional[int] = None,
       initial_state: Optional[List[Tuple[StateType, StateType]]] = None,
       ) -> Tuple[List[Tuple[StateType, StateType]], Array]:
 
@@ -343,7 +357,8 @@ class BiRNN(eqx.Module, Generic[StateType]):
     states = []
     layer_outs = inputs
     for i in range(len(self.fwd_cells)):
-      layer_states, layer_outs = self.apply_one_layer(i, layer_outs, initial_state[i])
+      layer_states, layer_outs = self.apply_one_layer(
+              i, layer_outs, initial_state[i], length=length)
       states.append(layer_states)
     return states, layer_outs
 
