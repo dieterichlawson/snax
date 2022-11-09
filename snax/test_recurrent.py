@@ -1,5 +1,9 @@
 import jax
 import jax.numpy as jnp
+from dataclasses import dataclass
+import equinox as eqx
+from typing import Tuple
+from chex import Scalar, Array
 
 from . import recurrent
 from . import utils
@@ -283,3 +287,61 @@ def test_deep_identity_bilstm():
 
   true_out = jnp.stack([true_fwd_hiddens_2, true_bwd_hiddens_2], axis=1)
   assert jnp.allclose(outs, true_out, rtol=1e-20, atol=1e-8)
+
+
+@utils.register_dataclass
+@dataclass
+class SimpleCellState:
+  value: Array
+
+class SimpleCell(eqx.Module):
+
+  hidden_dim: int = eqx.static_field()
+  out_dim: int = eqx.static_field()
+
+  def __init__(self):
+    self.hidden_dim = 1
+    self.out_dim = 1
+
+  def __call__(self,
+               prev_state: SimpleCellState,
+               inputs: Array
+               ) -> Tuple[SimpleCellState, Array]:
+    new_state = prev_state.value + inputs
+    return SimpleCellState(value=new_state), new_state
+
+  def initial_state(self) -> SimpleCellState:
+    return SimpleCellState(value=jnp.array(0))
+
+
+class SimpleRNN(recurrent.RNN[SimpleCellState]):
+
+  def __init__(self):
+    super().__init__(jax.random.PRNGKey(0), 1, [1], lambda *_: SimpleCell())
+
+
+def test_simple_rnn():
+  rnn = SimpleRNN()
+  inputs = jnp.arange(10)
+  state_check = jnp.cumsum(inputs, axis=0)
+  for l in range(10):
+    state, out = rnn(inputs, length=l)
+    assert jnp.allclose(state[0].value, state_check)
+    assert jnp.allclose(out, state_check)
+
+def test_simple_rnn_reverse():
+  rnn = SimpleRNN()
+  inputs = jnp.arange(10)
+  for l in range(10):
+    state, out = rnn(inputs, length=l, reverse=True)
+    state_check = jnp.cumsum(inputs[:l][::-1])[::-1]
+    assert jnp.allclose(state[0].value[:l], state_check)
+    assert jnp.allclose(out[:l], state_check)
+
+  # no length provided
+  state, out = rnn(inputs, reverse=True)
+  state_check = jnp.cumsum(inputs[::-1])[::-1]
+  assert jnp.allclose(state[0].value, state_check)
+  assert jnp.allclose(out, state_check)
+
+

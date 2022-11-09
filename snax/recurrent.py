@@ -7,7 +7,7 @@ from jax._src.random import KeyArray as PRNGKey
 from typing import TypeVar, Tuple, Callable, Generic, List, Optional
 from chex import Array, Scalar
 
-from .utils import register_dataclass
+from .utils import register_dataclass, flip_first_n
 from .nn import Linear, Affine
 from .base import RecurrentCell
 
@@ -197,7 +197,6 @@ class GRUCell(eqx.Module):
   def initial_state(self) -> GRUState:
     return GRUState(hidden=jnp.zeros([self.hidden_dim]))
 
-
 StateType = TypeVar("StateType")
 RNNCellConstructor = Callable[[PRNGKey, int, int], RecurrentCell[StateType]]
 
@@ -242,7 +241,7 @@ class RNN(eqx.Module, Generic[StateType]):
           self,
           inputs: Array,
           initial_state : Optional[List[StateType]] = None,
-          initial_state_t: Optional[Scalar] = None,
+          length: Optional[int] = None,
           reverse=False) -> Tuple[List[StateType], Array]:
 
     if initial_state is None:
@@ -253,19 +252,20 @@ class RNN(eqx.Module, Generic[StateType]):
             input: Array
             ) -> Tuple[Tuple[List[StateType], int], Tuple[List[StateType], Array]]:
       prev_state, t = carry
-
-      if initial_state_t is not None:
-        prev_state = jax.lax.cond(
-                jnp.equal(initial_state_t, t),
-                lambda _: initial_state,
-                lambda _: prev_state,
-                None)
-
       new_state, out = self.one_step(prev_state, input)
       return (new_state, t+1), (new_state, out)
 
+    reverse_scan = reverse and length is None
 
-    _, (states, outputs) = jax.lax.scan(scan_body, (initial_state, 0), inputs, reverse=reverse)
+    if reverse and length is not None:
+      inputs = flip_first_n(inputs, length)
+
+    _, (states, outputs) = jax.lax.scan(scan_body, (initial_state, 0), inputs,
+            reverse=reverse_scan)
+
+    if reverse and length is not None:
+      states = jax.tree_util.tree_map(lambda s: flip_first_n(s, length), states)
+      outputs = jax.tree_util.tree_map(lambda o: flip_first_n(o, length), outputs)
 
     return states, outputs
 
