@@ -7,27 +7,6 @@ PyTreeDef = Any
 
 Data = TypeVar('Data')
 
-def get_checkpoints(
-        checkpoint_dir: str,
-        name_prefix: str = "checkpoint",
-        filetype: str = ".chk") -> List[Path]:
-  """Get all paths to checkpoints in directory."""
-  checkpoint_glob = name_prefix + '*' + filetype
-  checkpoint_paths = Path(checkpoint_dir).glob(checkpoint_glob)
-  return list(checkpoint_paths)
-
-def step_from_path(path: Path) -> int:
-  return int(path.stem.split("_")[1])
-
-def save_checkpoint_to_path(
-        data: Any,
-        step: int,
-        path: Path,
-        treedef: Optional[PyTreeDef]=None) -> None:
-  path.parent.mkdir(parents=True, exist_ok=True)
-  with path.open(mode='wb') as f:
-    pickle.dump((data, step, treedef), f)
-
 def save_checkpoint(
         data: Any,
         step: int,
@@ -58,6 +37,18 @@ def save_checkpoint(
   new_path = Path(checkpoint_dir) / new_name
   save_checkpoint_to_path(data, step, new_path, treedef)
 
+def get_checkpoints(
+        checkpoint_dir: str,
+        name_prefix: str = "checkpoint",
+        filetype: str = ".chk") -> List[Path]:
+  """Get all paths to checkpoints in directory."""
+  checkpoint_glob = name_prefix + '*' + filetype
+  checkpoint_paths = Path(checkpoint_dir).glob(checkpoint_glob)
+  return list(checkpoint_paths)
+
+def step_from_path(path: Path) -> int:
+  return int(path.stem.split("_")[1])
+
 def get_latest_checkpoint_path(
         checkpoint_dir: str,
         name_prefix: str = "checkpoint",
@@ -68,6 +59,15 @@ def get_latest_checkpoint_path(
   steps = [step_from_path(x) for x in paths]
   max_ind = steps.index(max(steps))
   return paths[max_ind]
+
+def load_latest_checkpoint(
+        checkpoint_dir: str,
+        name_prefix: str = "checkpoint",
+        filetype: str = ".chk") -> Union[Tuple[None, None], Tuple[Any, int]]:
+  path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
+  if path is None:
+    return None, None
+  return load_checkpoint_from_path(path)
 
 def load_checkpoint_from_path(path: Path) -> Tuple[Any, int]:
   # Load checkpoint
@@ -82,14 +82,14 @@ def load_checkpoint_from_path(path: Path) -> Tuple[Any, int]:
 
   return data, step
 
-def load_latest_checkpoint(
-        checkpoint_dir: str,
-        name_prefix: str = "checkpoint",
-        filetype: str = ".chk") -> Union[Tuple[None, None], Tuple[Any, int]]:
-  path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
-  if path is None:
-    return None, None
-  return load_checkpoint_from_path(path)
+def save_checkpoint_to_path(
+        data: Any,
+        step: int,
+        path: Path,
+        treedef: Optional[PyTreeDef]=None) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with path.open(mode='wb') as f:
+    pickle.dump((data, step, treedef), f)
 
 def load_latest_checkpoint_with_treedef(
         treedef: PyTreeDef,
