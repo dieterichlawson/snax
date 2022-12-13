@@ -97,11 +97,18 @@ def load_latest_checkpoint_with_treedef(
         name_prefix: str = "checkpoint",
         filetype: str = ".chk") -> Union[Tuple[None, None], Tuple[Any, int]]:
   """Load latest checkpoint file, with explicit treedef passed in."""
+
+  # Load the latest checkpoint. Do not call `load_checkpoint_from_path`, so that
+  # we can use the treedef that was passed in.
   path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if path is None:
     return None, None
-  new_model, step = load_checkpoint_from_path(path)
+  with path.open(mode='rb') as f:
+    new_model, step, _ = pickle.load(f)
+
+  # Unflatten model
   loaded_leaves, _ = jax.tree_util.tree_flatten(new_model)
   loaded_leaves = [jax.numpy.array(x) for x in loaded_leaves]
   restored_model = treedef.unflatten(loaded_leaves)
+  
   return restored_model, step
