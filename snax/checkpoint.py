@@ -100,7 +100,7 @@ def load_latest_checkpoint_with_treedef(
   path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if path is None:
     return None, None
-  new_model, step, _ = load_checkpoint_from_path(path)
+  new_model, step = load_checkpoint_from_path(path)
   loaded_leaves, _ = jax.tree_util.tree_flatten(new_model)
   loaded_leaves = [jax.numpy.array(x) for x in loaded_leaves]
   restored_model = treedef.unflatten(loaded_leaves)
