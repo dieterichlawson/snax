@@ -83,7 +83,9 @@ class TrainStep:
     self.parallelize = parallelize
     self.optimizer = optimizer
     self.name = name
-
+    if dataset is not None:
+      assert batch_size == dataset.batch_size, \
+              "dataset batch size does not equal supplied batch size."
     if parallelize:
       assert batch_size % jax.local_device_count() == 0, \
         f"num devices ({jax.local_device_count()}) must evenly divide batch_size ({batch_size})."
