@@ -2,6 +2,18 @@ import dill as pickle
 from pathlib import Path
 from typing import TypeVar, Any, List, Optional, Tuple, Union
 import jax
+import jax._src.config
+
+def __getstate__(self):
+  return (self._getter, self._setter)
+
+def __setstate__(self, state):
+  getter, setter = state
+  super(jax._src.config.NameSpace, self).__setattr__('_getter', getter)
+  super(jax._src.config.NameSpace, self).__setattr__('_setter', setter)
+
+jax._src.config.NameSpace.__getstate__ = __getstate__
+jax._src.config.NameSpace.__setstate__ = __setstate__
 
 PyTreeDef = Any
 
