@@ -2,8 +2,8 @@ import os
 import tempfile
 import jax
 import jax.numpy as jnp
-from . import checkpoint
-from . import recurrent
+from snax import checkpoint
+from snax import recurrent
 
 def test_checkpoint_dir_not_exists():
   data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
@@ -126,6 +126,23 @@ def test_load_checkpoint_with_treedef():
     checkpoint.save_checkpoint(data, 1, dirname)
     _, treedef = jax.tree_util.tree_flatten(data)
     reloaded_data, _ = checkpoint.load_latest_checkpoint_with_treedef(treedef, dirname)
+    assert reloaded_data is not None
+
+    def for_body(i, val):
+      return val + reloaded_data[i]
+
+    reloaded_sum = jax.lax.fori_loop(0, 10, for_body, jnp.zeros([10]))
+    true_sum = jnp.sum(data, axis=0)
+    assert jnp.allclose(reloaded_sum, true_sum)
+
+def test_save_checkpoint_with_treedef():
+  data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
+  _, treedef = jax.tree_util.tree_flatten(data)
+
+  with tempfile.TemporaryDirectory() as dirname:
+    checkpoint.save_checkpoint(data, 1, dirname, treedef=treedef)
+    
+    reloaded_data, _ = checkpoint.load_latest_checkpoint(dirname)
     assert reloaded_data is not None
 
     def for_body(i, val):
