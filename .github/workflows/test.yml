@@ -5,9 +5,9 @@ name: Lint, Test, and Typecheck
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 concurrency:
   group: ${{ github.ref }}
