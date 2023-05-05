@@ -413,3 +413,11 @@ def test_simple_birnn():
   assert jnp.allclose(bwd_state.value, bwd_state_check)
   assert jnp.allclose(out[:, 0], fwd_state_check.squeeze())
   assert jnp.allclose(out[:, 1], bwd_state_check.squeeze())
+
+def test_flatten():
+  key = jax.random.PRNGKey(0)
+  rnn = recurrent.VanillaRNN(key, 2, [4])
+  leaves, _ = jax.tree_util.tree_flatten(rnn)
+  assert len(leaves) == 3
+  for l in leaves:
+    assert l.dtype == jnp.float32
