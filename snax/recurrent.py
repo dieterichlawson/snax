@@ -1,13 +1,12 @@
 import jax
 import jax.numpy as jnp
 import equinox as eqx
-from dataclasses import dataclass
 
 from jax._src.random import KeyArray as PRNGKey
 from typing import TypeVar, Tuple, Callable, Generic, List, Optional
-from chex import Array, Scalar
+from chex import Array
 
-from .utils import register_dataclass, flip_first_n
+from .utils import flip_first_n
 from .nn import Linear, Affine
 from .base import RecurrentCell
 
@@ -15,9 +14,7 @@ from jax.nn.initializers import glorot_normal, zeros, orthogonal
 
 ActivationFn = Callable[[Array], Array]
 
-@register_dataclass
-@dataclass
-class VanillaRNNState:
+class VanillaRNNState(eqx.Module):
   hidden: Array
 
 
@@ -65,9 +62,7 @@ class VanillaRNNCell(eqx.Module):
     return VanillaRNNState(hidden=jnp.zeros(self.hidden_dim))
 
 
-@register_dataclass
-@dataclass
-class LSTMState:
+class LSTMState(eqx.Module):
   hidden: Array
   cell: Array
 
@@ -131,9 +126,7 @@ class LSTMCell(eqx.Module):
                      cell=jnp.zeros([self.hidden_dim]))
 
 
-@register_dataclass
-@dataclass
-class GRUState:
+class GRUState(eqx.Module):
   hidden: Array
 
 

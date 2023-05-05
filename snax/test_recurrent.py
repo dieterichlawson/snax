@@ -1,9 +1,8 @@
 import jax
 import jax.numpy as jnp
-from dataclasses import dataclass
 import equinox as eqx
 from typing import Tuple
-from chex import Scalar, Array
+from chex import Array
 
 from . import recurrent
 from . import utils
@@ -333,9 +332,7 @@ def test_deep_identity_bilstm_not_full_length():
   assert jnp.allclose(outs[:length], true_out, rtol=1e-20, atol=1e-8)
 
 
-@utils.register_dataclass
-@dataclass
-class SimpleCellState:
+class SimpleCellState(eqx.Module):
   value: Array
 
 class SimpleCell(eqx.Module):
