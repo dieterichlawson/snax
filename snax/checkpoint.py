@@ -4,17 +4,6 @@ from typing import TypeVar, Any, List, Optional, Tuple, Union
 import jax
 import jax._src.config
 
-#def __getstate__(self):
-#  return (self._getter, self._setter)
-
-#def __setstate__(self, state):
-#  getter, setter = state
-#  super(jax._src.config.NameSpace, self).__setattr__('_getter', getter)
-#  super(jax._src.config.NameSpace, self).__setattr__('_setter', setter)
-
-#jax._src.config.NameSpace.__getstate__ = __getstate__
-#jax._src.config.NameSpace.__setstate__ = __setstate__
-
 PyTreeDef = Any
 
 Data = TypeVar('Data')
@@ -51,7 +40,7 @@ def get_checkpoints(
   return list(checkpoint_paths)
 
 def step_from_path(path: Path) -> int:
-  return int(path.stem.split("_")[1])
+  return int(path.stem.split("_")[-1])
 
 def get_latest_checkpoint_path(
         checkpoint_dir: str,

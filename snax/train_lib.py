@@ -275,15 +275,15 @@ def train_alternating(
       # Run one of the train steps
       new_params, loss_val, new_state = train_step_fn(local_step, params, state)
       if break_on_nan and not is_finite(params):
+        error_mess = f"Non-finite value detected in parameters at step {step}."
         if checkpoint_dir is not None:
-          print(f"Non-finite value detected at step {step}, saving a checkpoint and exiting...")
           chk.save_checkpoint((params, step_states, local_steps), step, checkpoint_dir,
                               name_prefix="nan_checkpoint",
                               num_checkpoints_to_keep=checkpoints_to_keep + 2)
 
-        else:
-          print(f"Non-finite value detected at step {step}, exiting...")
-        raise ValueError(f"Non-finite value detected in parameters at step {step}.")
+          error_mess += (" Last good parameters saved at " \
+                         f"{checkpoint_dir}/nan_checkpoint_{step:08d}.chk")
+        raise ValueError(error_mess)
       params = new_params
       loss_val.block_until_ready()
       sec = timer() - start_time
