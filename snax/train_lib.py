@@ -197,7 +197,8 @@ def train_alternating(
         checkpoint_every: Optional[int] = None,
         checkpoint_dir: Optional[str] = None,
         checkpoints_to_keep: int = 3,
-        use_wandb: bool = False) -> Params:
+        use_wandb: bool = False,
+        break_on_nan: bool = False) -> Params:
   """Run training.
 
   Iteratively runs a set of training steps, logging performance metrics and computing summaries.
@@ -257,6 +258,11 @@ def train_alternating(
   key, subkey = jax.random.split(key)
   summarize_fn(subkey, params, global_start_step)
 
+  @jax.jit
+  def is_finite(params):
+    isfinite = jax.tree_util.tree_map(lambda x: jnp.all(jnp.isfinite(x)), params)
+    return jnp.all(jnp.array(jax.tree_util.tree_flatten(isfinite)[0]))
+
   # Train.
   step = global_start_step
   while step < num_steps:
@@ -267,7 +273,18 @@ def train_alternating(
     for train_step_fn, state, local_step in zip(train_steps, step_states, local_steps):
       start_time = timer()
       # Run one of the train steps
-      params, loss_val, new_state = train_step_fn(local_step, params, state)
+      new_params, loss_val, new_state = train_step_fn(local_step, params, state)
+      if break_on_nan and not is_finite(params):
+        if checkpoint_dir is not None:
+          print(f"Non-finite value detected at step {step}, saving a checkpoint and exiting...")
+          chk.save_checkpoint((params, step_states, local_steps), step, checkpoint_dir,
+                              name_prefix="nan_checkpoint",
+                              num_checkpoints_to_keep=checkpoints_to_keep + 2)
+
+        else:
+          print(f"Non-finite value detected at step {step}, exiting...")
+        raise ValueError(f"Non-finite value detected in parameters at step {step}.")
+      params = new_params
       loss_val.block_until_ready()
       sec = timer() - start_time
       step_metrics = {'perf/steps_per_sec': train_step_fn.num_inner_steps / sec,
@@ -323,7 +340,8 @@ def train(key: PRNGKey,
           checkpoint_every: Optional[int] = None,
           checkpoint_dir: Optional[str] = None,
           checkpoints_to_keep: int = 3,
-          use_wandb: bool = False) -> Params:
+          use_wandb: bool = False,
+          break_on_nan: bool = False) -> Params:
   """Run training.
 
   Iteratively runs a training step, logging performance metrics and computing summaries.
@@ -366,4 +384,5 @@ def train(key: PRNGKey,
                            checkpoint_every=checkpoint_every,
                            checkpoint_dir=checkpoint_dir,
                            checkpoints_to_keep=checkpoints_to_keep,
-                           use_wandb=use_wandb)
+                           use_wandb=use_wandb,
+                           break_on_nan=break_on_nan)

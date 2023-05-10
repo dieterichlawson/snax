@@ -1,11 +1,50 @@
 import os
 os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
+import tempfile
 import jax
 import jax.numpy as jnp
 from . import train_lib
 from . import dataset
 import optax
 import pytest
+
+
+def test_nan_break_with_checkpoint():
+
+  def loss_fn(key, step, params):
+    return jnp.mean(jnp.power(params, params))
+
+  opt = optax.adam(10.)
+  with tempfile.TemporaryDirectory() as tmp_dir:
+    with pytest.raises(ValueError):
+      out = train_lib.train(
+            jax.random.PRNGKey(0),
+            loss_fn,
+            opt,
+            jnp.array(10.),
+            parallelize=False,
+            batch_size=16,
+            num_steps=1000,
+            break_on_nan=True,
+            checkpoint_dir=tmp_dir)
+    assert "nan_checkpoint_00000003.chk" in os.listdir(tmp_dir)
+
+def test_nan_break():
+
+  def loss_fn(key, step, params):
+    return jnp.mean(jnp.power(params, params))
+
+  opt = optax.adam(10.)
+  with pytest.raises(ValueError):
+    out = train_lib.train(
+          jax.random.PRNGKey(0),
+          loss_fn,
+          opt,
+          jnp.array(10.),
+          parallelize=False,
+          batch_size=16,
+          num_steps=1000,
+          break_on_nan=True)
 
 def test_train_no_dataset_no_parallel():
 
