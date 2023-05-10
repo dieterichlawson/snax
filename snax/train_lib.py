@@ -84,7 +84,7 @@ class TrainStep:
     self.optimizer = optimizer
     self.name = name
     if dataset is not None:
-      assert batch_size == dataset.batch_size, \
+      assert parallelize or (batch_size == dataset.batch_size), \
               "dataset batch size does not equal supplied batch size."
     if parallelize:
       assert batch_size % jax.local_device_count() == 0, \
@@ -245,8 +245,7 @@ def train_alternating(
 
   # Maybe load a checkpoint.
   if checkpoint_dir is not None and checkpoint_every is not None:
-    _, treedef = jax.tree_util.tree_flatten((params, step_states, local_steps))
-    out = chk.load_latest_checkpoint_with_treedef(treedef, checkpoint_dir)
+    out = chk.load_latest_checkpoint((params, step_states, local_steps), checkpoint_dir)
     if out[0] is not None:
       (params, step_states, local_steps), global_start_step = out
       print(f"Loaded checkpoint at step {global_start_step} from {checkpoint_dir}.")

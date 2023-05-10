@@ -11,7 +11,7 @@ def test_checkpoint_dir_not_exists():
   with tempfile.TemporaryDirectory() as dirname:
     new_dir = os.path.join(dirname, "tmp")
     checkpoint.save_checkpoint(data, 1, new_dir)
-    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(new_dir)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(data, new_dir)
     assert jnp.allclose(data, reloaded_data)
     assert step == reloaded_step
 
@@ -20,7 +20,7 @@ def test_checkpoint():
   step = 1
   with tempfile.TemporaryDirectory() as dirname:
     checkpoint.save_checkpoint(data, 1, dirname)
-    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(dirname)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(data, dirname)
     assert jnp.allclose(data, reloaded_data)
     assert step == reloaded_step
 
@@ -29,7 +29,7 @@ def test_checkpoint_rnn():
   step = 1
   with tempfile.TemporaryDirectory() as dirname:
     checkpoint.save_checkpoint(model, 1, dirname)
-    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint(dirname)
+    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint(model, dirname)
     assert reloaded_data is not None, "Checkpoint loading failed."
     def assert_close(x, y):
       assert jnp.allclose(x, y), "%s, %s" % (str(x), str(y))
@@ -49,12 +49,10 @@ def test_checkpoint_rnn():
 
 def test_checkpoint_rnn2():
   model = recurrent.LSTMCell(jax.random.PRNGKey(0), 2, 3, forget_gate_bias_init=12.)
-  _, model_treedef = jax.tree_util.tree_flatten(model)
   step = 1
   with tempfile.TemporaryDirectory() as dirname:
     checkpoint.save_checkpoint(model, 1, dirname)
-    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint_with_treedef(
-            model_treedef, dirname)
+    reloaded_data, reloaded_step =  checkpoint.load_latest_checkpoint(model, dirname)
 
     assert reloaded_data is not None, "Checkpoint loading failed."
     def assert_close(x, y):
@@ -92,15 +90,15 @@ def test_checkpoint_multi():
   datas = [jax.random.uniform(jax.random.PRNGKey(i), shape=[10,10]) for i in range(3)]
   with tempfile.TemporaryDirectory() as dirname:
     checkpoint.save_checkpoint(datas[0], 1, dirname)
-    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(dirname)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(datas[0], dirname)
     assert jnp.allclose(datas[0], reloaded_data)
     assert 1 == reloaded_step
     checkpoint.save_checkpoint(datas[1], 2, dirname)
-    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(dirname)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(datas[1], dirname)
     assert jnp.allclose(datas[1], reloaded_data)
     assert 2 == reloaded_step
     checkpoint.save_checkpoint(datas[2], 3, dirname)
-    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(dirname)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(datas[2], dirname)
     assert jnp.allclose(datas[2], reloaded_data)
     assert 3 == reloaded_step
 
@@ -109,7 +107,7 @@ def test_removing_checkpoint():
   with tempfile.TemporaryDirectory() as dirname:
     for data, step in zip(datas, range(5)):
       checkpoint.save_checkpoint(data, step + 1, dirname)
-    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(dirname)
+    reloaded_data, reloaded_step = checkpoint.load_latest_checkpoint(datas[-1], dirname)
     assert jnp.allclose(datas[4], reloaded_data)
     assert 5 == reloaded_step
     steps = [checkpoint.step_from_path(x) for x in checkpoint.get_checkpoints(dirname)]
@@ -124,8 +122,7 @@ def test_load_checkpoint_with_treedef():
   data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
   with tempfile.TemporaryDirectory() as dirname:
     checkpoint.save_checkpoint(data, 1, dirname)
-    _, treedef = jax.tree_util.tree_flatten(data)
-    reloaded_data, _ = checkpoint.load_latest_checkpoint_with_treedef(treedef, dirname)
+    reloaded_data, _ = checkpoint.load_latest_checkpoint(data, dirname)
     assert reloaded_data is not None
 
     def for_body(i, val):

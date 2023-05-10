@@ -1,19 +1,19 @@
-import dill as pickle
+import equinox as eqx
 from pathlib import Path
 from typing import TypeVar, Any, List, Optional, Tuple, Union
 import jax
 import jax._src.config
 
-def __getstate__(self):
-  return (self._getter, self._setter)
+#def __getstate__(self):
+#  return (self._getter, self._setter)
 
-def __setstate__(self, state):
-  getter, setter = state
-  super(jax._src.config.NameSpace, self).__setattr__('_getter', getter)
-  super(jax._src.config.NameSpace, self).__setattr__('_setter', setter)
+#def __setstate__(self, state):
+#  getter, setter = state
+#  super(jax._src.config.NameSpace, self).__setattr__('_getter', getter)
+#  super(jax._src.config.NameSpace, self).__setattr__('_setter', setter)
 
-jax._src.config.NameSpace.__getstate__ = __getstate__
-jax._src.config.NameSpace.__setstate__ = __setstate__
+#jax._src.config.NameSpace.__getstate__ = __getstate__
+#jax._src.config.NameSpace.__setstate__ = __setstate__
 
 PyTreeDef = Any
 
@@ -64,35 +64,18 @@ def get_latest_checkpoint_path(
   max_ind = steps.index(max(steps))
   return paths[max_ind]
 
-def load_latest_checkpoint(
-        checkpoint_dir: str,
-        name_prefix: str = "checkpoint",
-        filetype: str = ".chk") -> Union[Tuple[None, None], Tuple[Any, int]]:
-  path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
-  if path is None:
-    return None, None
-  return load_checkpoint_from_path(path)
-
-def load_checkpoint_from_path(path: Path) -> Tuple[Any, int]:
-  with path.open(mode='rb') as f:
-    data, step = pickle.load(f)
-  return data, step
-
 def save_checkpoint_to_path(data: Any, step: int, path: Path) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
-  with path.open(mode='wb') as f:
-    pickle.dump((data, step), f)
+  eqx.tree_serialise_leaves(path, (data, step))
 
-def load_latest_checkpoint_with_treedef(
-        treedef: PyTreeDef,
+def load_latest_checkpoint(
+        like: Any,
         checkpoint_dir: str,
         name_prefix: str = "checkpoint",
         filetype: str = ".chk") -> Union[Tuple[None, None], Tuple[Any, int]]:
   path = get_latest_checkpoint_path(checkpoint_dir, name_prefix=name_prefix, filetype=filetype)
   if path is None:
     return None, None
-  new_model, step = load_checkpoint_from_path(path)
-  loaded_leaves, _ = jax.tree_util.tree_flatten(new_model)
-  loaded_leaves = [jax.numpy.array(x) for x in loaded_leaves]
-  restored_model = treedef.unflatten(loaded_leaves)
+  pytree_like = (like, 0)
+  restored_model, step = eqx.tree_deserialise_leaves(path, pytree_like)
   return restored_model, step
