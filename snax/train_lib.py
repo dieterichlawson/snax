@@ -311,7 +311,7 @@ def train_alternating(
         # Construct the final metric dict to log to wanbd
         if use_wandb:
           wnb_metric_d = {"performance/summary_sec": summ_elapsed_time}
-          for loss_name, (loss_val, sps) in metrics.items():
+          for loss_name, (sps, loss_val) in metrics.items():
             wnb_metric_d[f"performance/{loss_name}_steps_per_sec"] = sps
             wnb_metric_d[f"losses/{loss_name}"] = loss_val
           wandb.log(wnb_metric_d, step=step)
