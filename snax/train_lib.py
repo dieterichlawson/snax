@@ -287,8 +287,7 @@ def train_alternating(
       params = new_params
       loss_val.block_until_ready()
       sec = timer() - start_time
-      step_metrics = {'perf/steps_per_sec': train_step_fn.num_inner_steps / sec,
-                      'loss': loss_val}
+      step_metrics = (train_step_fn.num_inner_steps / sec, loss_val)
       metrics[train_step_fn.name] = step_metrics
       step += train_step_fn.num_inner_steps
       new_local_steps.append(local_step + train_step_fn.num_inner_steps)
@@ -301,19 +300,21 @@ def train_alternating(
       if step % summarize_every == 0:
         # Print losses.
         print(f"Step {step}")
-        for loss_name, loss_metrics in metrics.items():
-          loss_val = loss_metrics['loss']
-          sps = loss_metrics['perf/steps_per_sec']
+        for loss_name, (loss_val, sps) in metrics.items():
           print(f"  {loss_name}: {loss_val:0.3f}, steps/sec {sps:0.2f}")
         # Compute summaries
         summ_start_time = timer()
         key, subkey = jax.random.split(key)
         summarize_fn(subkey, params, step)
         summ_elapsed_time = timer() - summ_start_time
-        metrics['summ_secs'] = summ_elapsed_time
         print(f"  summary sec: {summ_elapsed_time:0.2f}")
-        # Log to wandb
-        if use_wandb: wandb.log(metrics, step=step)
+        # Construct the final metric dict to log to wanbd
+        if use_wandb:
+          wnb_metric_d = {"performance/summary_sec": summ_elapsed_time}
+          for loss_name, (loss_val, sps) in metrics.items():
+            wnb_metric_d[f"performance/{loss_name}_steps_per_sec"] = sps
+            wnb_metric_d[f"losses/{loss_name}"] = loss_val
+          wandb.log(wnb_metric_d, step=step)
 
       if (checkpoint_dir is not None
           and checkpoint_every is not None
