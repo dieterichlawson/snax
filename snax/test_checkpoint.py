@@ -2,8 +2,10 @@ import os
 import tempfile
 import jax
 import jax.numpy as jnp
+import optax
 from . import checkpoint
 from . import recurrent
+from . import train_lib
 
 def test_checkpoint_dir_not_exists():
   data = jax.random.uniform(jax.random.PRNGKey(0), shape=[10,10])
@@ -131,3 +133,35 @@ def test_load_checkpoint_with_treedef():
     reloaded_sum = jax.lax.fori_loop(0, 10, for_body, jnp.zeros([10]))
     true_sum = jnp.sum(data, axis=0)
     assert jnp.allclose(reloaded_sum, true_sum)
+
+
+def test_model_only_checkpoint():
+
+  def loss_fn(key, step, params):
+    return jnp.mean(jnp.square(params))
+
+  opt = optax.adam(1e-2)
+  init_params = jnp.array(1.)
+
+  with tempfile.TemporaryDirectory() as dirname:
+    out = train_lib.train(
+            jax.random.PRNGKey(0),
+            loss_fn,
+            opt,
+            init_params,
+            parallelize=False,
+            batch_size=16,
+            num_steps=10,
+            summarize_every=5,
+            checkpoint_every=5,
+            checkpoints_to_keep=3,
+            checkpoint_dir=dirname)
+    import IPython
+    IPython.embed()
+
+    reloaded_data, step = checkpoint.load_latest_checkpoint_model_only(
+            init_params, dirname)
+    assert step == 10
+
+    assert reloaded_data is not None, "Checkpoint loading failed."
+    assert jnp.allclose(out, reloaded_data)

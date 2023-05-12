@@ -1,8 +1,10 @@
 import equinox as eqx
 from pathlib import Path
-from typing import TypeVar, Any, List, Optional, Tuple, Union
+from typing import TypeVar, Any, List, Optional, Tuple, Union, BinaryIO
 import jax
+import jax.numpy as jnp
 import jax._src.config
+import numpy as onp
 
 PyTreeDef = Any
 
@@ -57,6 +59,16 @@ def save_checkpoint_to_path(data: Any, step: int, path: Path) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   eqx.tree_serialise_leaves(path, (data, step))
 
+def allow_pickle_filter_spec(f: BinaryIO, x: Any) -> Any:
+    if isinstance(x, jax.Array):
+        return jnp.load(f, allow_pickle=True)
+    elif isinstance(x, onp.ndarray):
+        return onp.load(f, allow_pickle=True)
+    elif isinstance(x, (bool, float, complex, int)):
+        return onp.load(f, allow_pickle=True).item()
+    else:
+        return x
+
 def load_latest_checkpoint(
         like: Any,
         checkpoint_dir: str,
@@ -66,5 +78,6 @@ def load_latest_checkpoint(
   if path is None:
     return None, None
   pytree_like = (like, 0)
-  restored_model, step = eqx.tree_deserialise_leaves(path, pytree_like)
+  restored_model, step = eqx.tree_deserialise_leaves(
+          path, pytree_like, filter_spec=allow_pickle_filter_spec)
   return restored_model, step
