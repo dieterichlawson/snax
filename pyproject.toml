@@ -4,7 +4,7 @@ requires = [ "setuptools" ]
 
 [project]
 name = "snax"
-version = "0.0.32"
+version = "0.0.33"
 authors = [{name = "Dieterich Lawson", email = "dieterich.lawson@gmail.com"}]
 description = "A simple deep learning library for JAX."
 readme = "README.md"

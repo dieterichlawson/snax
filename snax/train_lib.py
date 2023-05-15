@@ -300,7 +300,7 @@ def train_alternating(
       if step % summarize_every == 0:
         # Print losses.
         print(f"Step {step}")
-        for loss_name, (loss_val, sps) in metrics.items():
+        for loss_name, (sps, loss_val) in metrics.items():
           print(f"  {loss_name}: {loss_val:0.3f}, steps/sec {sps:0.2f}")
         # Compute summaries
         summ_start_time = timer()
