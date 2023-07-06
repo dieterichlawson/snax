@@ -1,23 +1,26 @@
 [build-system]
-backend = "setuptools.build_meta"
 requires = [ "setuptools" ]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "snax"
-version = "0.0.33"
+name = "snaxlib"
+version = "0.0.34"
 authors = [{name = "Dieterich Lawson", email = "dieterich.lawson@gmail.com"}]
 description = "A simple deep learning library for JAX."
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT License"}
+license = {file = "LICENSE"}
 classifiers = [
-  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
+  "Development Status :: 2 - Pre-Alpha",
 ]
 dependencies = [
-  "jax >= 0.4.8",
-  "jaxlib >= 0.4.7",
+  "jax >= 0.4.6",
+  "jaxlib >= 0.4.6",
   "tensorflow_probability",
   "chex",
   "typing_extensions",
